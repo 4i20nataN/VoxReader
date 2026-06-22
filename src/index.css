@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+body {
+  background-color: var(--bg-app, #0F1115);
+  color: var(--text-main, #E2E8F0);
+  margin: 0;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Custom scrollbar for immersive themes */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color, #2D3139);
+  border-radius: 4px; border: 1px solid var(--bg-app);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover, #3D4455);
+}
+
+/* Range input accenting */
+input[type="range"] {
+  accent-color: var(--accent-hover);
+}

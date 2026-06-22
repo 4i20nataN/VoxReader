@@ -1,0 +1,6 @@
+{
+  "appId": "com.leitorinteligente.app",
+  "appName": "Leitor Inteligente",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
