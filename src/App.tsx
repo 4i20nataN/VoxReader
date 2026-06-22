@@ -351,16 +351,24 @@ export default function App() {
     setIsProcessingImage(true);
     setStatus('Iniciando análise OCR...');
     try {
-      const result = await Tesseract.recognize(file, 'por', {
+      const worker = await Tesseract.createWorker('por', undefined, {
         logger: m => {
           if (m.status === 'recognizing text') {
             setStatus(`Mapeando imagem... ${Math.round(m.progress * 100)}%`);
           }
         }
       });
-      setText(prev => (prev + '\n\n' + result.data.text).trim());
+      await worker.setParameters({
+        tessedit_pageseg_mode: '3',
+        preserve_interword_spaces: '1',
+        textord_heavy_nr: '1',
+        tessedit_enable_doc_dict: '1',
+      });
+      const { data } = await worker.recognize(file);
+      await worker.terminate();
+      setText(prev => (prev + '\n\n' + data.text).trim());
       setStatus('Texto extraído com sucesso');
-      const newItem: HistoryItem = { id: Date.now().toString(), text: result.data.text.trim(), date: Date.now(), type: 'ocr', favorite: false };
+      const newItem: HistoryItem = { id: Date.now().toString(), text: data.text.trim(), date: Date.now(), type: 'ocr', favorite: false };
       setClipboardHistory(prev => [newItem, ...prev].slice(0, 50));
     } catch (err) {
       console.error(err);
@@ -824,10 +832,10 @@ export default function App() {
                        </div>
                        <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-panel)] flex justify-end">
                           <button 
-                            onClick={() => { setText(item.originalText); setActiveTab('editor'); }}
-                            className="text-xs font-bold text-[var(--accent-color)] hover:text-[var(--accent-hover)] flex items-center gap-1"
-                          >
-                            Levar ao Editor
+                           onClick={() => { setText(item.explanation); setActiveTab('editor'); }}
+                             className="text-xs font-bold text-[var(--accent-color)] hover:text-[var(--accent-hover)] flex items-center gap-1"
+                           >
+                             Levar ao Editor
                           </button>
                        </div>
                      </div>
