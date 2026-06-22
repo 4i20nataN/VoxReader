@@ -66,6 +66,7 @@ export default function App() {
   const [isExplaining, setIsExplaining] = useState(false);
   const [explanation, setExplanation] = useState('');
   const [explanationProgress, setExplanationProgress] = useState(0);
+  const [showAiWarning, setShowAiWarning] = useState(false);
 
   // Refs
   const recognitionRef = useRef<any>(null);
@@ -419,9 +420,16 @@ export default function App() {
 
   const handleExplain = async (customText?: string) => {
     vibrate(50);
-    const targetText = customText || text;
+    const targetText = typeof customText === 'string' ? customText : text;
     if (!targetText.trim()) {
       setStatus('Texto vazio.');
+      return;
+    }
+
+    if (aiProvider !== 'local' && !aiApiKey) {
+      setShowAiWarning(true);
+      setActiveTab('settings');
+      setTimeout(() => setShowAiWarning(false), 4000);
       return;
     }
     
@@ -429,15 +437,6 @@ export default function App() {
 
     if (aiProvider !== 'local' && !navigator.onLine) {
       alert("Sem conexão com a internet. O modelo selecionado precisa de internet ou utilize o provedor Local.");
-      return;
-    }
-
-    if (aiProvider === 'google' && !aiApiKey) {
-      alert("Chave da API do Google não configurada. Salve sua chave nas Preferências primeiro.");
-      return;
-    }
-    if (aiProvider === 'openrouter' && !aiApiKey) {
-      alert("Chave da API do OpenRouter não configurada. Salve sua chave nas Preferências primeiro.");
       return;
     }
 
@@ -725,12 +724,22 @@ export default function App() {
                 </div>
               )}
 
-              {text.trim() && (
-                 <button onClick={handleExplain} className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-[var(--bg-header)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border border-[var(--border-color)] hover:border-[var(--accent-border)] rounded-full text-xs font-bold shadow-lg transition-all focus:outline-none active:scale-95 group-focus-within:opacity-100 opacity-60">
-                   <Sparkles size={14}/> Explicar com I.A.
-                 </button>
-              )}
+               {text.trim() && (
+                  <button onClick={() => handleExplain()} className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-[var(--bg-header)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border border-[var(--border-color)] hover:border-[var(--accent-border)] rounded-full text-xs font-bold shadow-lg transition-all focus:outline-none active:scale-95 group-focus-within:opacity-100 opacity-60">
+                    <Sparkles size={14}/> Explicar com I.A.
+                  </button>
+               )}
             </div>
+
+            {/* AI Warning Toast */}
+            {showAiWarning && (
+              <div className="mb-3 flex items-center justify-center animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center gap-3 px-5 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl shadow-lg backdrop-blur-sm">
+                  <Sparkles size={18} className="text-amber-500 shrink-0" />
+                  <p className="text-sm font-bold text-amber-500">Nenhuma I.A. configurada — vá em Ajustes e cadastre sua chave de API.</p>
+                </div>
+              </div>
+            )}
 
             {/* Quick Controls Layout */}
             <div className="mt-4 md:mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 md:gap-6 bg-[var(--bg-header)] p-4 rounded-xl border border-[var(--border-color)] shrink-0 transition-colors duration-300">
