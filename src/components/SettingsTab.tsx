@@ -46,6 +46,7 @@ interface SettingsTabProps {
   speechPrivacyOk: boolean | null;
   onCheckSpeechPrivacy: () => void;
   onAcceptSpeechPrivacy: () => void;
+  onDeactivateSpeechPrivacy: () => void;
 }
 
 function DebouncedInput({ value, onChange, ...props }: { value: string; onChange: (v: string) => void } & React.InputHTMLAttributes<HTMLInputElement>) {
@@ -79,7 +80,7 @@ export function SettingsTab(props: SettingsTabProps) {
     audioInputs, audioOutputs, selectedAudioInput, selectedAudioOutput,
     readSpecialChars, aiProvider, aiModel, aiApiKey, aiLocalUrl, showSaveToast,
     speechPacks, selectedPackName, installProgress, installingPack,
-    speechPrivacyOk, onCheckSpeechPrivacy, onAcceptSpeechPrivacy,
+    speechPrivacyOk, onCheckSpeechPrivacy, onAcceptSpeechPrivacy, onDeactivateSpeechPrivacy,
     onSetThemeBg, onSetThemeAccent, onSetStartWithWindows, onSetSelectedVoiceURI,
     onSetSelectedAudioInput, onSetSelectedAudioOutput, onSetReadSpecialChars,
     onSetAiProvider, onSaveConfigs,
@@ -124,18 +125,18 @@ export function SettingsTab(props: SettingsTabProps) {
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium text-[var(--text-light)]">Reconhecimento de Fala do Windows</span>
                 <button
-                  onClick={onAcceptSpeechPrivacy}
-                  disabled={speechPrivacyOk === true}
+                  onClick={speechPrivacyOk === true ? onDeactivateSpeechPrivacy : onAcceptSpeechPrivacy}
+                  disabled={speechPrivacyOk === null}
                   className={cn(
                     "text-xs px-3 py-1.5 rounded-lg font-medium transition-all active:scale-90",
                     speechPrivacyOk === true
-                      ? "bg-emerald-500 text-white cursor-default"
+                      ? "bg-red-500 text-white hover:bg-red-600"
                       : speechPrivacyOk === false
-                        ? "bg-amber-500 text-white hover:bg-amber-600"
+                        ? "bg-emerald-500 text-white hover:bg-emerald-600"
                         : "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)]"
                   )}
                 >
-                  {speechPrivacyOk === true ? '✓ Ativada' : speechPrivacyOk === false ? 'Ativar Agora' : 'Verificando...'}
+                  {speechPrivacyOk === true ? 'Desativar' : speechPrivacyOk === false ? 'Ativar' : 'Verificando...'}
                 </button>
               </div>
               <hr className="border-[var(--border-color)] mb-3" />

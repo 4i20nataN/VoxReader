@@ -170,11 +170,30 @@ ipcMain.handle('check-speech-privacy', async () => {
   });
 });
 
-// Activate Windows speech recognition (user found working command)
+// Activate Windows speech recognition
 ipcMain.handle('accept-speech-privacy', async () => {
   const ps = `
     Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy" -Name "HasAccepted" -Value 1 -Force;
     Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\InputPersonalization" -Name "AllowInputPersonalization" -Value 1 -Force;
+    Restart-Service -Name "Audiosrv" -Force
+  `;
+  const buf = Buffer.from(ps.trim(), 'ucs2');
+  const encoded = buf.toString('base64');
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 30000, windowsHide: true
+    }, (error) => {
+      if (error) resolve({ success: false, error: error.message });
+      else resolve({ success: true });
+    });
+  });
+});
+
+// Deactivate Windows speech recognition
+ipcMain.handle('deactivate-speech-privacy', async () => {
+  const ps = `
+    Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy" -Name "HasAccepted" -Value 0 -Force;
+    Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\InputPersonalization" -Name "AllowInputPersonalization" -Value 0 -Force;
     Restart-Service -Name "Audiosrv" -Force
   `;
   const buf = Buffer.from(ps.trim(), 'ucs2');

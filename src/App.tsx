@@ -213,6 +213,7 @@ export default function App() {
                speechPrivacyOk={speech.speechPrivacyOk}
                onCheckSpeechPrivacy={speech.checkSpeechPrivacy}
                onAcceptSpeechPrivacy={speech.acceptSpeechPrivacy}
+               onDeactivateSpeechPrivacy={speech.deactivateSpeechPrivacy}
             />
           )}
 

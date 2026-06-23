@@ -301,6 +301,18 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     } catch { setMicError('Erro ao comunicar com o Windows.'); }
   };
 
+  const deactivateSpeechPrivacy = async () => {
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('deactivate-speech-privacy');
+      if (result.success) {
+        setSpeechPrivacyOk(false);
+      } else {
+        setMicError('Erro ao desativar reconhecimento de fala: ' + (result.error || ''));
+      }
+    } catch { setMicError('Erro ao comunicar com o Windows.'); }
+  };
+
   // Auto-check on mount
   useEffect(() => { checkSpeechPrivacy(); }, []);
 
@@ -390,6 +402,6 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     micError, clearMicError,
     speechPacks, selectedPackName, installProgress, installingPack,
     checkSpeechPacks, installSpeechPack, removeSpeechPack, selectPack,
-    speechPrivacyOk, checkSpeechPrivacy, acceptSpeechPrivacy
+    speechPrivacyOk, checkSpeechPrivacy, acceptSpeechPrivacy, deactivateSpeechPrivacy
   };
 }
