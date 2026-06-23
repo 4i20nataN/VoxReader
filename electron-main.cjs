@@ -44,8 +44,32 @@ function showWindow() {
 }
 
 app.whenReady().then(() => {
-  // Tray icon from file
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'public/icon.png'));
+  // Build icon programmatically: blue circle with white play triangle
+  const size = 16;
+  const buf = Buffer.alloc(size * size * 4);
+  const cx = 7.5, cy = 7.5;
+  const radius = 7;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const dx = x - cx, dy = y - cy;
+      const insideCircle = (dx * dx + dy * dy) < (radius * radius);
+      if (insideCircle) {
+        // Blue circle (BGRA format on Windows)
+        buf[i] = 235; buf[i+1] = 99; buf[i+2] = 37; buf[i+3] = 255;
+        // White play triangle on top
+        const inTriangle = x >= 5 && x <= 12 && y >= 3 && y <= 12 &&
+          (x - 5) <= (12 - 5) * ((y - 3) / (12 - 3)) &&
+          (x - 5) <= (12 - 5) * ((12 - y) / (12 - 3));
+        if (inTriangle) {
+          buf[i] = 255; buf[i+1] = 255; buf[i+2] = 255; buf[i+3] = 255;
+        }
+      } else {
+        buf[i] = 0; buf[i+1] = 0; buf[i+2] = 0; buf[i+3] = 0;
+      }
+    }
+  }
+  const icon = nativeImage.createFromBuffer(buf, { width: size, height: size });
   tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
@@ -68,6 +92,5 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => globalShortcut.unregisterAll());
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+// Keep app alive in tray even when window is closed
+app.on('window-all-closed', () => {});
