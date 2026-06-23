@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session } = require('electron');
 const path = require('path');
 
 let tray = null;
@@ -8,6 +8,7 @@ app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
+app.commandLine.appendSwitch('enable-features', 'WebSpeech,NetworkService');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -44,6 +45,15 @@ function showWindow() {
 }
 
 app.whenReady().then(() => {
+  // Auto-grant microphone permission for speech recognition
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+    if (permission === 'media') { callback(true); } else { callback(false); }
+  });
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => {
+    if (permission === 'media') return true;
+    return false;
+  });
+
   // Build icon programmatically: blue circle with white play triangle
   const size = 16;
   const buf = Buffer.alloc(size * size * 4);
