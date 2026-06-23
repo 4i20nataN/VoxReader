@@ -1,10 +1,9 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut } = require('electron');
 const path = require('path');
 
 let tray = null;
 let mainWindow = null;
 
-// Chromium flags for lower memory usage
 app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
@@ -12,18 +11,11 @@ app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-fo
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    minWidth: 800,
-    minHeight: 600,
-    show: false,
-    frame: true,
-    autoHideMenuBar: true,
+    width: 1000, height: 700,
+    minWidth: 800, minHeight: 600,
+    show: false, frame: true, autoHideMenuBar: true,
     backgroundColor: '#0a0a0f',
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    },
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
     icon: path.join(__dirname, 'public/icon.svg')
   });
 
@@ -31,26 +23,13 @@ function createWindow() {
      mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
   });
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show();
-  });
+  mainWindow.on('ready-to-show', () => mainWindow.show());
 
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
-      dialog.showMessageBox(mainWindow, {
-        type: 'question',
-        buttons: ['Fechar', 'Cancelar'],
-        defaultId: 1,
-        title: 'Leitor Inteligente',
-        message: 'O app continuará rodando na bandeja.',
-        detail: 'Clique com botão direito no ícone da bandeja para sair completamente.'
-      }).then(({ response }) => {
-        if (response === 0) {
-          mainWindow.destroy();
-          mainWindow = null;
-        }
-      });
+      mainWindow.destroy();
+      mainWindow = null;
     }
   });
 }
@@ -65,10 +44,10 @@ function showWindow() {
 }
 
 app.whenReady().then(() => {
-  // Start only in tray — no window created until user opens it
-
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'public/icon.png'));
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  // Embedded 16x16 blue play-triangle PNG as base64 (no external file needed)
+  const iconData = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFElEQVR4nGNgIAmoJr/+P1wEsAIA1g4dWTRWz8kAAAAASUVORK5CYII=';
+  const icon = nativeImage.createFromBuffer(Buffer.from(iconData, 'base64'));
+  tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Abrir Leitor Inteligente', click: showWindow },
@@ -81,18 +60,14 @@ app.whenReady().then(() => {
 
   tray.setToolTip('Leitor Inteligente');
   tray.setContextMenu(contextMenu);
-
   tray.on('click', showWindow);
 
-  // Global shortcut: Ctrl+Shift+Space to open window
   globalShortcut.register('CommandOrControl+Shift+Space', showWindow);
 
   app.on('activate', showWindow);
 });
 
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-});
+app.on('will-quit', () => globalShortcut.unregisterAll());
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
