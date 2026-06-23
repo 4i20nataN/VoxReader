@@ -51,8 +51,20 @@ ipcMain.handle('start-speech-recognition', async () => {
   const psScript = `
 Add-Type -AssemblyName System.Speech
 try {
-  $culture = [System.Globalization.CultureInfo]::GetCultureInfo('pt-BR')
-  $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine($culture)
+  $cultures = @('pt-BR', 'pt-PT', $null)
+  $rec = $null
+  foreach ($c in $cultures) {
+    try {
+      if ($c) {
+        $ci = [System.Globalization.CultureInfo]::GetCultureInfo($c)
+        $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine($ci)
+      } else {
+        $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine
+      }
+      break
+    } catch { continue }
+  }
+  if (-not $rec) { Write-Output '__NO_RECOGNIZER__'; return }
   $rec.SetInputToDefaultAudioDevice()
   $grammar = New-Object System.Speech.Recognition.DictationGrammar
   $rec.LoadGrammar($grammar)
@@ -75,12 +87,12 @@ try {
       windowsHide: true
     }, (error, stdout, stderr) => {
       const output = (stdout || '').trim();
-      if (output.startsWith('__ERROR__')) {
+      if (output === '__NO_RECOGNIZER__') {
+        resolve({ error: 'Reconhecimento de fala do Windows não encontrado. Instale um pacote de reconhecimento de fala em: Configurações > Hora e Idioma > Fala > Baixar pacote de reconhecimento de fala.' });
+      } else if (output.startsWith('__ERROR__')) {
         const errMsg = output.replace('__ERROR__', '').trim();
         if (errMsg.includes('System.Speech')) {
           resolve({ error: 'Reconhecimento de voz do Windows não disponível. Instale o pacote de idioma de Fala no Windows: Configurações > Hora e Idioma > Fala.' });
-        } else if (errMsg.includes('CultureNotFound') || errMsg.includes('pt-BR') || errMsg.includes('No recognizer')) {
-          resolve({ error: 'Pacote de reconhecimento de fala para Português não encontrado. Instale em: Configurações > Hora e Idioma > Fala > Baixar pacote de reconhecimento de fala.' });
         } else {
           resolve({ error: errMsg });
         }
