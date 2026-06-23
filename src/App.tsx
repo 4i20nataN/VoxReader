@@ -14,6 +14,8 @@ import { HistoryItem, SavedTextItem } from './types';
 import { SetupWizard } from './components/SetupWizard';
 import { NavButton } from './components/NavButton';
 import { HistoryCard } from './components/HistoryCard';
+import { EditorTab } from './components/EditorTab';
+import { SettingsTab } from './components/SettingsTab';
 
 // --- Web Speech API Types ---
 const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -222,9 +224,10 @@ export default function App() {
   }, [aiProvider, aiApiKey, aiModel, aiLocalUrl]);
 
   // --- Core Functions ---
-  const handleRead = () => {
+  const handleRead = (customText?: string) => {
     vibrate(50);
-    if (!text.trim()) {
+    const readText = customText ?? text;
+    if (!readText.trim()) {
       setStatus('Editor vazio.');
       return;
     }
@@ -237,7 +240,7 @@ export default function App() {
       return;
     }
 
-    let textToRead = text.trim();
+    let textToRead = readText.trim();
     if (readSpecialChars) {
       textToRead = textToRead
         .replace(/&/g, ' e comercial ')
@@ -264,8 +267,8 @@ export default function App() {
       setIsSpeaking(true);
       setIsPaused(false);
       setStatus('Leitura em andamento...');
-      const newItem: HistoryItem = { id: Date.now().toString(), text: text.trim(), date: Date.now(), type: 'read', favorite: false };
-      setHistory(prev => [newItem, ...prev].slice(0, 100)); // Keep up to 100
+      const newItem: HistoryItem = { id: Date.now().toString(), text: readText.trim(), date: Date.now(), type: 'read', favorite: false };
+      setHistory(prev => [newItem, ...prev].slice(0, 100));
     };
 
     utterance.onend = () => {
@@ -749,138 +752,35 @@ export default function App() {
           
           {/* Editor Section */}
           {activeTab === 'editor' && (
-          <div className="absolute inset-0 overflow-y-auto flex flex-col p-4 md:p-6 lg:p-8 transition-opacity">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 shrink-0 gap-3">
-              <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest flex items-center gap-2">
-                 transcrição & edição
-                <span className="hidden sm:inline-block text-[10px] font-normal text-[var(--text-darker)] normal-case bg-[var(--bg-panel)] px-2 py-0.5 rounded border border-[var(--border-color)]">{status}</span>
-              </span>
-              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                <button onClick={handleClipboard} className="flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-1.5 bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] rounded border border-[var(--border-color)] text-xs text-[var(--text-main)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent-transparent)]">
-                  <Clipboard size={14} className="inline-block" /> Colar
-                </button>
-                <label className="flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-1.5 bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] rounded border border-[var(--border-color)] text-xs text-[var(--text-main)] cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-[var(--accent-transparent)]">
-                  <FileText size={14} className="inline-block" /> Txt
-                  <input type="file" accept=".txt,text/plain" className="hidden" onChange={handleTextUpload} />
-                </label>
-                <label className="flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-1.5 bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] rounded border border-[var(--border-color)] text-xs text-[var(--text-main)] cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-[var(--accent-transparent)]">
-                  <ImageIcon size={14} className="inline-block" /> Img
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                </label>
-                <button onClick={() => setText('')} className="flex-none items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded border border-red-500/20 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex-1 relative flex flex-col min-h-0 group">
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="A fala transcrita aparecerá aqui...&#10;Cole, digite ou solte arquivos de texto / imagens para converter em som."
-                className={cn(
-                  "flex-1 w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-xl p-4 md:p-6 text-base md:text-lg leading-relaxed focus:outline-none focus:border-[var(--accent-hover)] resize-none placeholder-[var(--text-darker)] text-[var(--text-main)] transition-colors duration-300",
-                  isDragging && "border-[var(--accent-hover)] bg-[var(--accent-transparent)]"
-                )}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              />
-              
-              {isDragging && (
-                <div className="absolute inset-0 border-2 border-dashed border-[var(--accent-hover)] bg-[var(--bg-sidebar)]/80 rounded-xl flex flex-col items-center justify-center z-10 backdrop-blur-sm pointer-events-none">
-                  <Upload size={48} className="text-[var(--accent-hover)] mb-4 animate-bounce" />
-                  <p className="text-lg font-bold text-[var(--accent-hover)] tracking-wide">Solte o arquivo aqui</p>
-                </div>
-              )}
-
-              {isRecording && (
-                <div className="absolute top-4 right-4 flex items-center space-x-2 bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-2 rounded-full shadow-lg backdrop-blur-md">
-                  <Mic size={14} className="animate-pulse" />
-                  <span className="text-xs font-bold uppercase tracking-wider">Escutando áudio...</span>
-                </div>
-              )}
-
-                   <button onClick={() => handleAI('explain')} disabled={!text.trim()} className={cn("absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-[var(--bg-header)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border border-[var(--border-color)] hover:border-[var(--accent-border)] rounded-full text-xs font-bold shadow-lg transition-all focus:outline-none active:scale-95 group-focus-within:opacity-100", !text.trim() && "opacity-30 pointer-events-none")}>
-                     <Sparkles size={14}/> Explicar com I.A.
-                   </button>
-            </div>
-
-            {/* AI Warning Toast */}
-            {showAiWarning && (
-              <div className="mb-3 flex items-center justify-center animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center gap-3 px-5 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl shadow-lg backdrop-blur-sm">
-                  <Sparkles size={18} className="text-amber-500 shrink-0" />
-                  <p className="text-sm font-bold text-amber-500">Nenhuma I.A. configurada — vá em Ajustes e cadastre sua chave de API.</p>
-                </div>
-              </div>
-            )}
-
-            {/* AI Action Buttons */}
-            <div className="flex items-center justify-center gap-3 mt-3 mb-1 shrink-0 flex-wrap">
-              <button onClick={() => handleAI('correct')} disabled={!text.trim()} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !text.trim() && "opacity-40 pointer-events-none")}>
-                <CheckCheck size={14}/> CORRIGIR
-              </button>
-              <button onClick={() => handleAI('translate-to', undefined, targetLang)} disabled={!text.trim()} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !text.trim() && "opacity-40 pointer-events-none")}>
-                <Languages size={14}/> TRADUZIR
-              </button>
-              <div className="relative">
-                <button onClick={() => { if (text.trim()) setShowLangDropdown(!showLangDropdown); }} disabled={!text.trim()} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !text.trim() && "opacity-40 pointer-events-none")}>
-                  <Globe size={14}/> {targetLang} <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-                </button>
-                {showLangDropdown && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowLangDropdown(false)} />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl shadow-2xl overflow-hidden z-50 min-w-[160px] py-1 max-h-64 overflow-y-auto">
-                      {languages.map(lang => (
-                        <button
-                          key={lang.value}
-                          onClick={() => { setTargetLang(lang.value); setShowLangDropdown(false); }}
-                          className={cn("w-full text-left px-4 py-2.5 text-xs font-medium transition-colors flex items-center gap-2", targetLang === lang.value ? "text-[var(--accent-hover)] bg-[var(--accent-transparent)]" : "text-[var(--text-main)] hover:bg-[var(--accent-transparent)] hover:text-[var(--accent-hover)]")}
-                        >
-                          <Globe size={12}/> {lang.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Controls Layout */}
-            <div className="mt-4 md:mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 md:gap-6 bg-[var(--bg-header)] p-4 rounded-xl border border-[var(--border-color)] shrink-0 transition-colors duration-300">
-              <div className="flex items-center gap-4 flex-1 w-full sm:max-w-xs xl:max-w-sm">
-                <div className="flex flex-col gap-2 w-full">
-                  <label className="text-[10px] uppercase font-bold text-[var(--text-muted)] flex justify-between">
-                    <span>Velocidade de Leitura</span>
-                    <span className="text-[var(--accent-hover)]">{rate}x</span>
-                  </label>
-                  <input type="range" min="0.5" max="2.5" step="0.1" value={rate} onChange={(e) => setRate(parseFloat(e.target.value))} className="w-full h-1.5 bg-[var(--border-hover)] rounded appearance-none cursor-pointer outline-none transition-colors" />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto justify-center">
-                <button onClick={handleStop} disabled={!isSpeaking && !isPaused} className="w-12 h-12 flex items-center justify-center rounded-xl bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-hover)] disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-hover)]">
-                  <Square size={18} fill="currentColor" />
-                </button>
-                {!isSpeaking ? (
-                   <button id="play-button" onClick={handleRead} disabled={!text.trim() || isProcessingImage} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2 transition-all shadow-[0_4px_14px_var(--accent-transparent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-transparent)]">
-                    <Play size={18} fill="currentColor" /> <span className="hidden sm:inline">Ler Agora</span>
-                  </button>
-                ) : (
-                  <button onClick={handlePause} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-bold flex justify-center items-center gap-2 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50">
-                    <Pause size={18} fill="currentColor" /> <span className="hidden sm:inline">Pausar</span>
-                  </button>
-                )}
-                <button onClick={toggleRecording} className={cn("flex flex-col items-center gap-1.5 group select-none focus:outline-none cursor-pointer shrink-0", isRecording ? "text-red-500" : "text-[var(--text-muted)] hover:text-[var(--text-main)]")}>
-                   <div className={cn("w-12 h-12 flex items-center justify-center rounded-full border transition-all shadow-sm", isRecording ? "bg-red-500/10 border-red-500/40" : "bg-[var(--bg-panel)] border-[var(--border-color)] group-hover:border-[var(--border-hover)] group-active:scale-95")}>
-                    {isRecording ? <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]" /> : <Mic size={20} className="md:w-5 md:h-5"/>}
-                  </div>
-                  <span className="hidden md:inline text-[9px] font-bold uppercase tracking-widest mt-1">{isRecording ? "Gravando" : "Ditar"}</span>
-                </button>
-              </div>
-            </div>
-          </div>
+            <EditorTab
+              text={text}
+              status={status}
+              isProcessingImage={isProcessingImage}
+              isDragging={isDragging}
+              isRecording={isRecording}
+              isSpeaking={isSpeaking}
+              isPaused={isPaused}
+              showAiWarning={showAiWarning}
+              showLangDropdown={showLangDropdown}
+              targetLang={targetLang}
+              rate={rate}
+              onTextChange={setText}
+              onClipboard={handleClipboard}
+              onTextUpload={handleTextUpload}
+              onImageUpload={handleImageUpload}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onAI={handleAI}
+              onRead={handleRead}
+              onPause={handlePause}
+              onStop={handleStop}
+              onToggleRecording={toggleRecording}
+              onSetLangDropdown={setShowLangDropdown}
+              onSetTargetLang={setTargetLang}
+              onSetRate={setRate}
+              languages={languages}
+            />
           )}
 
           {/* Saved Texts Tab */}
@@ -1028,178 +928,35 @@ export default function App() {
 
           {/* Settings Tab */}
           {activeTab === 'settings' && (
-          <div className="absolute inset-0 overflow-y-auto p-4 sm:p-6 lg:p-10">
-            <div className="max-w-2xl mx-auto bg-[var(--bg-sidebar)] rounded-xl border border-[var(--border-color)] shadow-xl overflow-hidden transition-colors duration-300 mb-10 md:mb-0">
-              <div className="p-6 md:p-8 border-b border-[var(--border-color)] bg-[var(--bg-header)] flex justify-between items-start">
-                <div>
-                  <h2 className="font-semibold text-lg md:text-xl text-[var(--text-main)] tracking-tight">Motor & Preferências</h2>
-                  <p className="text-sm text-[var(--text-muted)] mt-2 tracking-wide">Ajuste a síntese de voz, I.A. explicativa e personalização.</p>
-                </div>
-              </div>
-              
-              <div className="p-6 md:p-8 space-y-10">
-                {/* System Settings */}
-                <div className="space-y-4">
-                  <h3 className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] pb-2 mb-4">Sistema Windows</h3>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className="relative">
-                      <input type="checkbox" className="sr-only" checked={startWithWindows} onChange={(e) => setStartWithWindows(e.target.checked)} />
-                      <div className={cn("w-10 h-6 rounded-full transition-colors", startWithWindows ? "bg-[var(--accent-hover)]" : "bg-[var(--bg-panel)] border border-[var(--border-color)]")}></div>
-                      <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white transition-transform", startWithWindows ? "left-5" : "left-1")}></div>
-                    </div>
-                    <span className="text-sm text-[var(--text-main)] group-hover:text-[var(--accent-hover)] transition-colors">Iniciar o leitor junto com o Windows<br/><span className="text-xs text-[var(--text-muted)] font-normal">(Requer instalação do PWA)</span></span>
-                  </label>
-                </div>
-
-                <hr className="border-[var(--border-color)]" />
-                
-                {/* Theme Selectors */}
-                <div className="space-y-6">
-                  <h3 className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] pb-2 mb-4">Aparência (48 variações)</h3>
-                  
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-[var(--text-light)] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]" /> Plano de Fundo Base</label>
-                    <div className="flex flex-wrap gap-2 md:gap-3">
-                      {Object.keys(backgroundPalettes).map((bg) => (
-                        <button 
-                          key={bg} onClick={() => setThemeBg(bg as ThemeBg)}
-                          className={cn(
-                            "px-4 py-2 rounded-lg text-sm font-medium border transition-all capitalize",
-                            themeBg === bg ? "bg-[var(--accent-transparent)] border-[var(--accent-hover)] text-[var(--accent-hover)] shadow-[0_0_10px_var(--accent-transparent)]" : "bg-[var(--bg-panel)] border-[var(--border-color)] text-[var(--text-light)] hover:text-[var(--text-main)] hover:border-[var(--border-hover)]"
-                          )}
-                        >
-                          {bg}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    <label className="text-sm font-medium text-[var(--text-light)] flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]" /> Cor de Destaque Primária</label>
-                    <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 mt-2">
-                      {Object.keys(accentPalettes).map((accent) => (
-                        <button 
-                          key={accent} onClick={() => setThemeAccent(accent as ThemeAccent)}
-                          className={cn(
-                            "aspect-square rounded-full border-2 transition-transform hover:scale-110 flex items-center justify-center",
-                            themeAccent === accent ? "scale-110 shadow-[0_0_15px_var(--accent-glow)] z-10" : "border-transparent"
-                          )}
-                          style={{ backgroundColor: accentPalettes[accent as ThemeAccent]['--accent-color'], borderColor: themeAccent === accent ? 'var(--text-main)' : 'transparent' }}
-                          title={accent}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <hr className="border-[var(--border-color)]" />
-                
-                {/* Voice Engine */}
-                <div className="space-y-4">
-                  <h3 className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] pb-2 mb-4">Áudio Engine</h3>
-                  <label className="block text-sm font-medium text-[var(--text-light)]">Motor de Voz Instalado (Offline)</label>
-                  <div className="relative">
-                    <select
-                      value={selectedVoiceURI}
-                      onChange={(e) => setSelectedVoiceURI(e.target.value)}
-                      className="w-full appearance-none bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-3 px-4 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] focus:ring-1 focus:ring-[var(--accent-hover)] transition-colors shadow-sm"
-                    >
-                      {voices.map((voice) => (
-                        <option key={voice.voiceURI} value={voice.voiceURI}>
-                          {voice.name} ({voice.lang}) {voice.default ? ' - (Padrão)' : ''}
-                        </option>
-                      ))}
-                      {voices.length === 0 && <option>Monitorando barramento de falas...</option>}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-[var(--text-muted)]">
-                      <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                    </div>
-                  </div>
-                  <p className="text-xs text-[var(--text-darker)] leading-relaxed mb-4">As vozes operam processando áudio através das bibliotecas locais do Windows (SAPI)/SO. Nada é enviado à nuvem.</p>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Microfone Recomendado (Entrada)</label>
-                      <select value={selectedAudioInput} onChange={(e) => setSelectedAudioInput(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
-                        <option value="default">Padrão do Sistema</option>
-                        {audioInputs.map(device => (
-                          <option key={device.deviceId} value={device.deviceId}>{device.label || `Microfone ${device.deviceId.slice(0, 5)}...`}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Saída de Áudio</label>
-                      <select value={selectedAudioOutput} onChange={(e) => setSelectedAudioOutput(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
-                        <option value="default">Padrão do Sistema</option>
-                        {audioOutputs.map(device => (
-                          <option key={device.deviceId} value={device.deviceId}>{device.label || `Saída ${device.deviceId.slice(0, 5)}...`}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  
-                  <label className="flex items-center gap-3 cursor-pointer group mt-4">
-                    <div className="relative">
-                      <input type="checkbox" className="sr-only" checked={readSpecialChars} onChange={(e) => setReadSpecialChars(e.target.checked)} />
-                      <div className={cn("w-10 h-6 rounded-full transition-colors", readSpecialChars ? "bg-[var(--accent-hover)]" : "bg-[var(--bg-panel)] border border-[var(--border-color)]")}></div>
-                      <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white transition-transform", readSpecialChars ? "left-5" : "left-1")}></div>
-                    </div>
-                    <span className="text-sm text-[var(--text-main)] group-hover:text-[var(--accent-hover)] transition-colors">Ler caracteres especiais<br/><span className="text-xs text-[var(--text-muted)] font-normal">(Exemplo: arroba, hashtag, porcento...)</span></span>
-                  </label>
-                </div>
-
-                <hr className="border-[var(--border-color)]" />
-
-                {/* AI Explanation Config */}
-                <div className="space-y-4">
-                  <h3 className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] pb-2 mb-4 flex items-center gap-2"><Sparkles size={14} className="text-[var(--accent-hover)]"/> Integração I.A. (Explicador)</h3>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Provedor</label>
-                      <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value as any)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
-                        <option value="google">Google Gemini API</option>
-                        <option value="openrouter">OpenRouter API</option>
-                        <option value="local">Modelo Local (Ollama/LM Studio)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Modelo</label>
-                      <input type="text" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder="ex: gemini-2.5-flash" className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm" />
-                    </div>
-                  </div>
-
-                  {aiProvider === 'local' ? (
-                    <div>
-                      <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">URL da API Local</label>
-                      <input type="text" value={aiLocalUrl} onChange={(e) => setAiLocalUrl(e.target.value)} placeholder="http://localhost:11434/v1/chat/completions" className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm font-mono" />
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Chave da API (Salva no navegador)</label>
-                      <input type="password" value={aiApiKey} onChange={(e) => setAiApiKey(e.target.value)} placeholder="sk-..." className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm font-mono" />
-                    </div>
-                  )}
-                  <p className="text-xs text-[var(--text-darker)] leading-relaxed">Você pode usar I.A. para resumir textos no Editor. Suas credenciais nunca saem do seu navegador (Client-Side).</p>
-                </div>
-                
-                {/* Save Configurations */}
-                <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[var(--border-color)]">
-                  <div className="h-6 flex items-center">
-                    {showSaveToast && (
-                      <span className="text-emerald-500 font-bold text-sm tracking-wide animate-in fade-in slide-in-from-bottom-2 flex items-center gap-2">
-                        <Check size={16} /> Configurações Salvas
-                      </span>
-                    )}
-                  </div>
-                  <button onClick={handleSaveConfigs} className="w-full sm:w-auto px-8 py-3.5 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold transition-all shadow-[0_4px_14px_var(--accent-transparent)] flex items-center justify-center gap-2 active:scale-95">
-                    <Save size={18} /> Salvar Preferências
-                  </button>
-                </div>
-
-              </div>
-            </div>
-          </div>
+            <SettingsTab
+              themeBg={themeBg}
+              themeAccent={themeAccent}
+              startWithWindows={startWithWindows}
+              voices={voices}
+              selectedVoiceURI={selectedVoiceURI}
+              audioInputs={audioInputs}
+              audioOutputs={audioOutputs}
+              selectedAudioInput={selectedAudioInput}
+              selectedAudioOutput={selectedAudioOutput}
+              readSpecialChars={readSpecialChars}
+              aiProvider={aiProvider}
+              aiModel={aiModel}
+              aiApiKey={aiApiKey}
+              aiLocalUrl={aiLocalUrl}
+              showSaveToast={showSaveToast}
+              onSetThemeBg={setThemeBg}
+              onSetThemeAccent={setThemeAccent}
+              onSetStartWithWindows={setStartWithWindows}
+              onSetSelectedVoiceURI={setSelectedVoiceURI}
+              onSetSelectedAudioInput={setSelectedAudioInput}
+              onSetSelectedAudioOutput={setSelectedAudioOutput}
+              onSetReadSpecialChars={setReadSpecialChars}
+              onSetAiProvider={setAiProvider}
+              onSetAiModel={setAiModel}
+              onSetAiApiKey={setAiApiKey}
+              onSetAiLocalUrl={setAiLocalUrl}
+              onSaveConfigs={handleSaveConfigs}
+            />
           )}
 
         </main>
