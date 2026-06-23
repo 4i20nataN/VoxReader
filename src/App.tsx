@@ -3,7 +3,8 @@ import {
   Play, Pause, Square, Mic, MicOff, Settings, 
   History, Clipboard, FileText, Image as ImageIcon, 
   Trash2, Clock, Upload, Check, Volume2, Save,
-  Star, Sparkles, X, Filter, ArrowDownWideNarrow
+  Star, Sparkles, X, Filter, ArrowDownWideNarrow,
+  Languages, Globe, CheckCheck
 } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 import { format } from 'date-fns';
@@ -67,6 +68,9 @@ export default function App() {
   const [explanation, setExplanation] = useState('');
   const [explanationProgress, setExplanationProgress] = useState(0);
   const [showAiWarning, setShowAiWarning] = useState(false);
+  const [aiAction, setAiAction] = useState<'explain' | 'translate' | 'correct' | 'english' | 'translate-to'>('explain');
+  const [showLangDropdown, setShowLangDropdown] = useState(false);
+  const [targetLang, setTargetLang] = useState('Inglês');
 
   // Refs
   const recognitionRef = useRef<any>(null);
@@ -426,7 +430,7 @@ export default function App() {
     if (e.target.files && e.target.files.length > 0) processTextFile(e.target.files[0]);
   };
 
-  const handleExplain = async (customText?: string) => {
+  const handleAI = async (action: 'explain' | 'translate' | 'correct' | 'english' | 'translate-to', customText?: string, targetLang?: string) => {
     vibrate(50);
     const targetText = typeof customText === 'string' ? customText : text;
     if (!targetText.trim()) {
@@ -441,6 +445,7 @@ export default function App() {
       return;
     }
     
+    setAiAction(action);
     setTextBeingExplained(targetText);
 
     if (aiProvider !== 'local' && !navigator.onLine) {
@@ -466,11 +471,10 @@ export default function App() {
     let phraseIndex = 0;
     setExplanation(loadingPhrases[0]);
     
-    // Animate progress bar during AI generation (estimated to take around 15 seconds)
     const progressInterval = setInterval(() => {
       setExplanationProgress(prev => {
-        if (prev >= 95) return prev; // Hold at 95% until complete
-        return prev + (Math.random() * 5 + 2); // Random jump to feel more organic
+        if (prev >= 95) return prev;
+        return prev + (Math.random() * 5 + 2);
       });
     }, 1000);
 
@@ -479,16 +483,40 @@ export default function App() {
       setExplanation(loadingPhrases[phraseIndex]);
     }, 5500);
 
+    let systemContent = '';
+    let userPrompt = '';
+    switch (action) {
+      case 'explain':
+        systemContent = 'Explique o texto do usuário de forma clara e resumida.';
+        userPrompt = `Explique, resuma ou analise o seguinte texto de forma muito clara e concisa:\n\n${targetText.substring(0, 4000)}`;
+        break;
+      case 'translate':
+        systemContent = 'Você é um tradutor profissional. Traduza o texto do usuário para o português brasileiro de forma natural e precisa.';
+        userPrompt = `Traduza o seguinte texto para o português brasileiro de forma clara e natural, mantendo o significado original:\n\n${targetText.substring(0, 4000)}`;
+        break;
+      case 'correct':
+        systemContent = 'Você é um revisor de texto profissional. Corrija erros de português mantendo o sentido original do texto.';
+        userPrompt = `Corrija a gramática, ortografia e pontuação do seguinte texto, mantendo o sentido original. Apenas devolva o texto corrigido, sem explicações adicionais:\n\n${targetText.substring(0, 4000)}`;
+        break;
+      case 'english':
+        systemContent = 'You are a professional English translator. Translate the user text to natural, fluent English.';
+        userPrompt = `Translate the following text to English in a clear and natural way, preserving the original meaning:\n\n${targetText.substring(0, 4000)}`;
+        break;
+      case 'translate-to':
+        systemContent = `Você é um tradutor profissional. Traduza o texto do usuário para ${targetLang} de forma natural e precisa.`;
+        userPrompt = `Traduza o seguinte texto para ${targetLang} de forma clara e natural, mantendo o significado original:\n\n${targetText.substring(0, 4000)}`;
+        break;
+    }
+
     try {
       let responseText = '';
-      const prompt = `Você é um assistente útil e direto. Explique, resuma ou analise o seguinte texto de forma muito clara e concisa:\n\n${targetText.substring(0, 4000)}`;
 
       if (aiProvider === 'google') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent?key=${aiApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
+            contents: [{ parts: [{ text: userPrompt }] }]
           })
         });
         const data = await res.json();
@@ -504,8 +532,8 @@ export default function App() {
           body: JSON.stringify({
             model: aiModel,
             messages: [
-              { role: 'system', content: 'Explique o texto do usuário de forma clara e resumida.' },
-              { role: 'user', content: prompt }
+              { role: 'system', content: systemContent },
+              { role: 'user', content: userPrompt }
             ]
           })
         });
@@ -560,9 +588,35 @@ export default function App() {
     : `${estimatedSeconds}s`;
 
   const activeVoiceName = voices.find(v => v.voiceURI === selectedVoiceURI)?.name || 'Voz Padrão';
+  const modalTitle = { explain: 'Explicação I.A.', translate: 'Tradução I.A.', correct: 'Correção I.A.', english: 'Tradução I.A.', 'translate-to': 'Tradução I.A.' }[aiAction];
+  const languages = [
+    { label: 'Inglês', value: 'Inglês' },
+    { label: 'Espanhol', value: 'Espanhol' },
+    { label: 'Francês', value: 'Francês' },
+    { label: 'Alemão', value: 'Alemão' },
+    { label: 'Italiano', value: 'Italiano' },
+    { label: 'Japonês', value: 'Japonês' },
+    { label: 'Chinês', value: 'Chinês' },
+    { label: 'Russo', value: 'Russo' },
+    { label: 'Coreano', value: 'Coreano' },
+    { label: 'Árabe', value: 'Árabe' },
+    { label: 'Hindi', value: 'Hindi' },
+    { label: 'Holandês', value: 'Holandês' },
+    { label: 'Polonês', value: 'Polonês' },
+    { label: 'Sueco', value: 'Sueco' },
+    { label: 'Turco', value: 'Turco' },
+    { label: 'Vietnamita', value: 'Vietnamita' },
+    { label: 'Tailandês', value: 'Tailandês' },
+    { label: 'Grego', value: 'Grego' },
+    { label: 'Hebraico', value: 'Hebraico' },
+    { label: 'Romeno', value: 'Romeno' },
+    { label: 'Tcheco', value: 'Tcheco' },
+    { label: 'Húngaro', value: 'Húngaro' },
+    { label: 'Ucraniano', value: 'Ucraniano' },
+  ];
 
   return (
-    <div style={getThemeStyles(themeBg, themeAccent)} className="flex flex-col md:flex-row bg-[var(--bg-app)] text-[var(--text-main)] font-sans h-screen w-full overflow-hidden transition-colors duration-300">
+    <div style={getThemeStyles(themeBg, themeAccent)} className="flex flex-col md:flex-row bg-[var(--bg-app)] text-[var(--text-main)] font-sans h-dvh w-full overflow-hidden transition-colors duration-300">
       
       {showSetup && <SetupWizard onComplete={() => setShowSetup(false)} />}
       
@@ -570,7 +624,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 lg:p-10 animate-in fade-in duration-200">
           <div className="bg-[var(--bg-panel)] border border-[var(--border-color)] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
             <div className="h-16 px-6 border-b border-[var(--border-color)] flex items-center justify-between shrink-0 bg-[var(--bg-header)] rounded-t-2xl">
-              <h2 className="font-bold flex items-center gap-2 tracking-tight text-[var(--text-main)]"><Sparkles className="text-[var(--accent-hover)]" size={20}/> Explicação I.A.</h2>
+              <h2 className="font-bold flex items-center gap-2 tracking-tight text-[var(--text-main)]"><Sparkles className="text-[var(--accent-hover)]" size={20}/> {modalTitle}</h2>
               <button 
                 onClick={() => setShowExplainModal(false)}
                 className="p-2 bg-[var(--bg-app)] rounded-full text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors focus:ring-2 focus:ring-[var(--border-hover)] focus:outline-none"
@@ -598,27 +652,41 @@ export default function App() {
               )}
             </div>
             {!isExplaining && !explanation.startsWith('Erro ao processar') && (
-              <div className="p-4 border-t border-[var(--border-color)] flex justify-between shrink-0 bg-[var(--bg-header)] rounded-b-2xl">
+              <div className="p-4 border-t border-[var(--border-color)] flex items-center justify-center gap-4 shrink-0 bg-[var(--bg-header)] rounded-b-2xl px-6">
                 <button
                   onClick={() => {
+                    const savedType = aiAction === 'translate-to' ? 'translate' : aiAction;
+                    const label = { explain: 'Explicação gerada', translate: 'Traduzido', correct: 'Corrigido' }[savedType];
                     const newItem: SavedTextItem = {
                       id: Date.now().toString(),
                       originalText: textBeingExplained,
                       explanation: explanation,
                       date: Date.now(),
-                      title: "Explicação gerada: " + format(Date.now(), 'dd/MM HH:mm')
+                      title: `${label}: ${format(Date.now(), 'dd/MM HH:mm')}`,
+                      savedType
                     };
                     setSavedTexts(prev => [newItem, ...prev]);
                     setShowExplainModal(false);
-                    setStatus('Explicação salva com sucesso!');
+                    setStatus(`${label} salvo com sucesso!`);
                   }}
-                  className="px-6 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
                 >
-                  <Save size={16} /> Salvar Explicação
+                  <Save size={16} /> Salvar
+                </button>
+                <button
+                  onClick={() => {
+                    setText(explanation);
+                    setShowExplainModal(false);
+                    setActiveTab('editor');
+                    setStatus('Texto enviado para o editor');
+                  }}
+                  className="px-4 py-2 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
+                >
+                  <FileText size={16} /> Editar
                 </button>
                 <button
                   onClick={() => setShowExplainModal(false)}
-                  className="px-6 py-2 bg-[var(--bg-app)] hover:bg-[var(--border-color)] text-[var(--text-main)] rounded-lg text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-[var(--bg-app)] hover:bg-[var(--border-color)] text-[var(--text-main)] rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   Fechar
                 </button>
@@ -639,7 +707,7 @@ export default function App() {
       )}
 
       {/* Left/Bottom Sidebar: Main Navigation */}
-      <nav className="order-last md:order-first w-full md:w-20 h-16 md:h-auto bg-[var(--bg-sidebar)] border-t md:border-t-0 md:border-r border-[var(--border-color)] flex flex-row md:flex-col justify-around md:justify-start items-center md:py-8 shrink-0 z-20 transition-colors duration-300">
+      <nav className="shrink-0 order-last md:order-first w-full md:w-20 h-16 md:h-auto bg-[var(--bg-sidebar)] border-t md:border-t-0 md:border-r border-[var(--border-color)] flex flex-row md:flex-col justify-around md:justify-start items-center md:py-8 z-30 transition-colors duration-300">
         <div className="hidden md:flex w-12 h-12 bg-[var(--accent-color)] rounded-xl items-center justify-center shadow-[0_0_15px_var(--accent-glow)] mb-8">
           <Volume2 size={24} className="text-white" />
         </div>
@@ -651,7 +719,7 @@ export default function App() {
         </div>
       </nav>
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <header className="h-16 md:h-20 flex items-center justify-between px-4 lg:px-8 bg-[var(--bg-header)] border-b border-[var(--border-color)] shrink-0 transition-colors duration-300">
           <div className="flex items-center gap-4">
@@ -677,10 +745,11 @@ export default function App() {
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 flex overflow-hidden relative">
+        <main className="flex-1 w-full relative overflow-hidden min-h-0">
           
           {/* Editor Section */}
-          <div className={cn("flex-1 flex flex-col p-4 md:p-6 lg:p-8 overflow-hidden transition-opacity", activeTab !== 'editor' && "hidden")}>
+          {activeTab === 'editor' && (
+          <div className="absolute inset-0 overflow-y-auto flex flex-col p-4 md:p-6 lg:p-8 transition-opacity">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 shrink-0 gap-3">
               <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest flex items-center gap-2">
                  transcrição & edição
@@ -732,11 +801,9 @@ export default function App() {
                 </div>
               )}
 
-               {text.trim() && (
-                  <button onClick={() => handleExplain()} className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-[var(--bg-header)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border border-[var(--border-color)] hover:border-[var(--accent-border)] rounded-full text-xs font-bold shadow-lg transition-all focus:outline-none active:scale-95 group-focus-within:opacity-100 opacity-60">
-                    <Sparkles size={14}/> Explicar com I.A.
-                  </button>
-               )}
+                   <button onClick={() => handleAI('explain')} disabled={!text.trim()} className={cn("absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-[var(--bg-header)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border border-[var(--border-color)] hover:border-[var(--accent-border)] rounded-full text-xs font-bold shadow-lg transition-all focus:outline-none active:scale-95 group-focus-within:opacity-100", !text.trim() && "opacity-30 pointer-events-none")}>
+                     <Sparkles size={14}/> Explicar com I.A.
+                   </button>
             </div>
 
             {/* AI Warning Toast */}
@@ -748,6 +815,37 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* AI Action Buttons */}
+            <div className="flex items-center justify-center gap-3 mt-3 mb-1 shrink-0 flex-wrap">
+              <button onClick={() => handleAI('correct')} disabled={!text.trim()} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !text.trim() && "opacity-40 pointer-events-none")}>
+                <CheckCheck size={14}/> CORRIGIR
+              </button>
+              <button onClick={() => handleAI('translate-to', undefined, targetLang)} disabled={!text.trim()} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !text.trim() && "opacity-40 pointer-events-none")}>
+                <Languages size={14}/> TRADUZIR
+              </button>
+              <div className="relative">
+                <button onClick={() => { if (text.trim()) setShowLangDropdown(!showLangDropdown); }} disabled={!text.trim()} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !text.trim() && "opacity-40 pointer-events-none")}>
+                  <Globe size={14}/> {targetLang} <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                {showLangDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowLangDropdown(false)} />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl shadow-2xl overflow-hidden z-50 min-w-[160px] py-1 max-h-64 overflow-y-auto">
+                      {languages.map(lang => (
+                        <button
+                          key={lang.value}
+                          onClick={() => { setTargetLang(lang.value); setShowLangDropdown(false); }}
+                          className={cn("w-full text-left px-4 py-2.5 text-xs font-medium transition-colors flex items-center gap-2", targetLang === lang.value ? "text-[var(--accent-hover)] bg-[var(--accent-transparent)]" : "text-[var(--text-main)] hover:bg-[var(--accent-transparent)] hover:text-[var(--accent-hover)]")}
+                        >
+                          <Globe size={12}/> {lang.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
 
             {/* Quick Controls Layout */}
             <div className="mt-4 md:mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 md:gap-6 bg-[var(--bg-header)] p-4 rounded-xl border border-[var(--border-color)] shrink-0 transition-colors duration-300">
@@ -766,7 +864,7 @@ export default function App() {
                   <Square size={18} fill="currentColor" />
                 </button>
                 {!isSpeaking ? (
-                   <button onClick={handleRead} disabled={!text.trim() || isProcessingImage} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2 transition-all shadow-[0_4px_14px_var(--accent-transparent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-transparent)]">
+                   <button id="play-button" onClick={handleRead} disabled={!text.trim() || isProcessingImage} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2 transition-all shadow-[0_4px_14px_var(--accent-transparent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-transparent)]">
                     <Play size={18} fill="currentColor" /> <span className="hidden sm:inline">Ler Agora</span>
                   </button>
                 ) : (
@@ -774,21 +872,20 @@ export default function App() {
                     <Pause size={18} fill="currentColor" /> <span className="hidden sm:inline">Pausar</span>
                   </button>
                 )}
-              </div>
-
-              <div className="flex-none sm:flex-1 flex justify-end absolute right-4 top-4 sm:relative sm:right-auto sm:top-auto">
-                 <button onClick={toggleRecording} className={cn("flex flex-col items-center gap-1.5 group select-none focus:outline-none cursor-pointer", isRecording ? "text-red-500" : "text-[var(--text-muted)] hover:text-[var(--text-main)]")}>
-                   <div className={cn("w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full border transition-all shadow-sm", isRecording ? "bg-red-500/10 border-red-500/40" : "bg-[var(--bg-panel)] border-[var(--border-color)] group-hover:border-[var(--border-hover)] group-active:scale-95")}>
-                     {isRecording ? <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]" /> : <Mic size={18} className="md:w-5 md:h-5"/>}
-                   </div>
-                   <span className="hidden md:inline text-[9px] font-bold uppercase tracking-widest mt-1">{isRecording ? "Gravando" : "Ditar"}</span>
-                 </button>
+                <button onClick={toggleRecording} className={cn("flex flex-col items-center gap-1.5 group select-none focus:outline-none cursor-pointer shrink-0", isRecording ? "text-red-500" : "text-[var(--text-muted)] hover:text-[var(--text-main)]")}>
+                   <div className={cn("w-12 h-12 flex items-center justify-center rounded-full border transition-all shadow-sm", isRecording ? "bg-red-500/10 border-red-500/40" : "bg-[var(--bg-panel)] border-[var(--border-color)] group-hover:border-[var(--border-hover)] group-active:scale-95")}>
+                    {isRecording ? <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]" /> : <Mic size={20} className="md:w-5 md:h-5"/>}
+                  </div>
+                  <span className="hidden md:inline text-[9px] font-bold uppercase tracking-widest mt-1">{isRecording ? "Gravando" : "Ditar"}</span>
+                </button>
               </div>
             </div>
           </div>
+          )}
 
           {/* Saved Texts Tab */}
-          <div className={cn("flex-1 w-full p-4 lg:p-8 overflow-y-auto scrollbar-thin overflow-x-hidden", activeTab !== 'saved' && "hidden")}>
+          {activeTab === 'saved' && (
+          <div className="absolute inset-0 overflow-y-auto p-4 lg:p-8 overflow-x-hidden">
              <div className="max-w-4xl mx-auto">
                <div className="flex items-center justify-between mb-6">
                  <div>
@@ -802,13 +899,18 @@ export default function App() {
                  {savedTexts.length === 0 ? (
                    <div className="h-60 flex flex-col items-center justify-center text-[var(--text-darker)] bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl">
                       <Save size={40} className="mb-4 opacity-20" />
-                      <p className="text-sm text-center max-w-sm">Você ainda não salvou nenhuma explicação. Gere explicacões no Editor e clique em Salvar.</p>
+                       <p className="text-sm text-center max-w-sm">Você ainda não salvou nenhum resultado. Gere explicações, traduções ou correções no Editor e clique em Salvar.</p>
                    </div>
                  ) : (
                    savedTexts.map(item => (
-                     <div key={item.id} className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden group">
-                       <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-header)] flex justify-between items-center">
-                         <h3 className="font-bold text-sm text-[var(--text-main)]">{item.title}</h3>
+                      <div key={item.id} className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden group">
+                         <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-header)] flex justify-between items-center gap-2">
+                          <h3 className="font-bold text-sm text-[var(--text-main)] flex items-center gap-2">
+                            <span className={cn("text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full", item.savedType === 'explain' ? "bg-purple-500/10 text-purple-400" : item.savedType === 'translate' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400")}>
+                              {item.savedType === 'explain' ? 'Explicação' : item.savedType === 'translate' ? 'Traduzido' : 'Corrigido'}
+                            </span>
+                            {item.title}
+                          </h3>
                          <button 
                            onClick={() => setSavedTexts(prev => prev.filter(x => x.id !== item.id))}
                            className="text-[var(--text-muted)] hover:text-red-500 transition-colors focus:outline-none"
@@ -824,7 +926,7 @@ export default function App() {
                            </div>
                          </div>
                          <div className="space-y-2">
-                           <h4 className="text-xs font-bold text-[var(--accent-hover)] uppercase tracking-widest flex items-center gap-2"><Sparkles size={14}/> Explicação I.A.</h4>
+                            <h4 className="text-xs font-bold text-[var(--accent-hover)] uppercase tracking-widest flex items-center gap-2"><Sparkles size={14}/> {item.savedType === 'explain' ? 'Explicação I.A.' : item.savedType === 'translate' ? 'Tradução I.A.' : 'Correção I.A.'}</h4>
                            <div className="text-[var(--text-main)] whitespace-pre-wrap select-text leading-relaxed">
                              {item.explanation}
                            </div>
@@ -844,9 +946,11 @@ export default function App() {
                </div>
              </div>
           </div>
+          )}
 
           {/* History Tab */}
-          <div className={cn("flex-1 w-full p-4 lg:p-8 overflow-y-auto scrollbar-thin overflow-x-hidden", activeTab !== 'history' && "hidden")}>
+          {activeTab === 'history' && (
+          <div className="absolute inset-0 overflow-y-auto p-4 lg:p-8 overflow-x-hidden">
             <div className="max-w-6xl mx-auto flex flex-col gap-4 mb-4">
                <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--bg-sidebar)] p-4 rounded-xl border border-[var(--border-color)]">
                  <div className="flex items-center gap-2">
@@ -885,7 +989,7 @@ export default function App() {
                         onClick={() => { setText(item.text); setActiveTab('editor'); }} 
                         onDelete={() => setHistory(h => h.filter(x => x.id !== item.id))}
                         onFavorite={() => toggleFavorite(item.id, false)}
-                        onExplain={() => handleExplain(item.text)}
+                        onExplain={() => handleAI('explain', item.text)}
                       />
                     ))
                   )}
@@ -911,7 +1015,7 @@ export default function App() {
                         onClick={() => { setText((prev) => (prev + '\n\n' + item.text).trim()); setActiveTab('editor'); }} 
                         onDelete={() => setClipboardHistory(h => h.filter(x => x.id !== item.id))}
                         onFavorite={() => toggleFavorite(item.id, true)}
-                        onExplain={() => handleExplain(item.text)}
+                        onExplain={() => handleAI('explain', item.text)}
                       />
                     ))
                   )}
@@ -920,9 +1024,11 @@ export default function App() {
 
             </div>
           </div>
+          )}
 
           {/* Settings Tab */}
-          <div className={cn("flex-1 w-full p-4 sm:p-6 lg:p-10 overflow-y-auto", activeTab !== 'settings' && "hidden")}>
+          {activeTab === 'settings' && (
+          <div className="absolute inset-0 overflow-y-auto p-4 sm:p-6 lg:p-10">
             <div className="max-w-2xl mx-auto bg-[var(--bg-sidebar)] rounded-xl border border-[var(--border-color)] shadow-xl overflow-hidden transition-colors duration-300 mb-10 md:mb-0">
               <div className="p-6 md:p-8 border-b border-[var(--border-color)] bg-[var(--bg-header)] flex justify-between items-start">
                 <div>
@@ -1094,6 +1200,7 @@ export default function App() {
               </div>
             </div>
           </div>
+          )}
 
         </main>
       </div>
