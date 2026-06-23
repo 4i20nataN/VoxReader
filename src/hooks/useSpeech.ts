@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { HistoryItem } from '../types';
 
-const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
 interface UseSpeechParams {
   text: string;
@@ -24,6 +24,18 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   const [selectedAudioInput, setSelectedAudioInput] = useState<string>('default');
   const [selectedAudioOutput, setSelectedAudioOutput] = useState<string>('default');
   const [micError, setMicError] = useState<string | null>(null);
+  const [speechPrivacyOk, setSpeechPrivacyOk] = useState<boolean | null>(null);
+  const [speechPacks, setSpeechPacks] = useState<{ name: string; displayName: string; installed: boolean }[]>([]);
+  const [installingPack, setInstallingPack] = useState<string | null>(null);
+  const [installProgress, setInstallProgress] = useState(0);
+  const [selectedPackName, setSelectedPackName] = useState(() => localStorage.getItem('selected_speech_pack') || '');
+
+  const packToCulture = (name: string) => {
+    const m = name.match(/~~~([a-z]{2}-[A-Z]{2})~/);
+    return m ? m[1] : 'pt-BR';
+  };
+
+  const recognitionCulture = selectedPackName ? packToCulture(selectedPackName) : 'pt-BR';
 
   const synthRef = useRef<SpeechSynthesis>(window.speechSynthesis);
   const recognitionRef = useRef<any>(null);
@@ -194,12 +206,18 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
         onStatusChange('Gravação encerrada');
         return;
       }
+
+      if (!selectedPackName) {
+        setMicError('Nenhum pacote de fala selecionado. Vá em Ajustes > Reconhecimento de Fala, baixe e selecione um pacote como "Em uso".');
+        return;
+      }
+
       setIsRecording(true);
       onStatusChange('Preparando reconhecimento de voz do Windows...');
       try {
         const { ipcRenderer } = (window as any).require('electron');
-        const result = await ipcRenderer.invoke('start-speech-recognition');
-        if (result.error) {
+        const result = await ipcRenderer.invoke('start-speech-recognition', recognitionCulture);
+        if (!result.success) {
           setMicError(result.error);
           onStatusChange('Erro no reconhecimento de voz');
         } else if (result.text) {
@@ -248,6 +266,92 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
 
   const clearMicError = () => setMicError(null);
 
+  // Windows speech privacy management
+  const checkSpeechPrivacy = async () => {
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('check-speech-privacy');
+      setSpeechPrivacyOk(result.accepted === true);
+    } catch { setSpeechPrivacyOk(null); }
+  };
+
+  const acceptSpeechPrivacy = async () => {
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('accept-speech-privacy');
+      if (result.success) {
+        setSpeechPrivacyOk(true);
+      } else {
+        setMicError('Erro ao ativar reconhecimento de fala: ' + (result.error || ''));
+      }
+    } catch { setMicError('Erro ao comunicar com o Windows.'); }
+  };
+
+  // Auto-check on mount
+  useEffect(() => { checkSpeechPrivacy(); }, []);
+
+  // Windows speech pack management
+  const checkSpeechPacks = async () => {
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('check-speech-packs');
+      if (result.packs) setSpeechPacks(result.packs);
+    } catch { /* not in Electron */ }
+  };
+
+  const installSpeechPack = async (packName: string) => {
+    setInstallingPack(packName);
+    setInstallProgress(0);
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('install-speech-pack', packName);
+      setInstallProgress(100);
+      if (result.success) {
+        onStatusChange('Pacote instalado!');
+        setSelectedPackName(packName);
+        await checkSpeechPacks();
+      } else {
+        setMicError(result.error || 'Falha ao instalar pacote.');
+      }
+    } catch { setMicError('Erro ao instalar pacote.'); }
+    setInstallingPack(null);
+    setInstallProgress(0);
+  };
+
+  const removeSpeechPack = async (packName: string) => {
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('remove-speech-pack', packName);
+      if (result.success) {
+        if (selectedPackName === packName) setSelectedPackName('');
+        await checkSpeechPacks();
+        onStatusChange('Pacote desinstalado!');
+      } else {
+        setMicError(result.error || 'Falha ao desinstalar pacote.');
+      }
+    } catch { setMicError('Erro ao desinstalar pacote.'); }
+  };
+
+  const selectPack = (packName: string) => {
+    setSelectedPackName(packName);
+    localStorage.setItem('selected_speech_pack', packName);
+  };
+
+  // Listen for install progress from main process
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const handler = (_: any, data: { packName: string; progress: number }) => {
+        if (data.packName === installingPack) setInstallProgress(data.progress);
+      };
+      ipcRenderer.on('install-progress', handler);
+      return () => { try { ipcRenderer.removeListener('install-progress', handler); } catch {} };
+    } catch { return () => {}; }
+  }, [installingPack]);
+
+  // Persist selected pack
+  useEffect(() => { localStorage.setItem('selected_speech_pack', selectedPackName); }, [selectedPackName]);
+
   // Global Play/Pause wrapper for Electron
   useEffect(() => {
     (window as any).togglePlayPause = () => {
@@ -269,6 +373,9 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     selectedAudioOutput, setSelectedAudioOutput,
     setSelectedVoiceURI, setRate, activeVoiceName,
     handleRead, handlePause, handleStop, toggleRecording,
-    micError, clearMicError
+    micError, clearMicError,
+    speechPacks, selectedPackName, installProgress, installingPack,
+    checkSpeechPacks, installSpeechPack, removeSpeechPack, selectPack,
+    speechPrivacyOk, checkSpeechPrivacy, acceptSpeechPrivacy
   };
 }

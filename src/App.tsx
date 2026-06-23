@@ -114,7 +114,7 @@ export default function App() {
   return (
     <div style={getThemeStyles(theme.themeBg, theme.themeAccent)} className="flex flex-col md:flex-row bg-[var(--bg-app)] text-[var(--text-main)] font-sans h-dvh w-full overflow-hidden transition-colors duration-300">
 
-      {theme.showSetup && <SetupWizard onComplete={() => theme.setShowSetup(false)} />}
+      {theme.showSetup && <SetupWizard onComplete={() => theme.setShowSetup(false)} speechPacks={speech.speechPacks} installingPack={speech.installingPack} installProgress={speech.installProgress} onCheckSpeechPacks={speech.checkSpeechPacks} onInstallSpeechPack={speech.installSpeechPack} />}
 
       {showExplainModal && (
       <AiModal
@@ -197,15 +197,22 @@ export default function App() {
               selectedAudioOutput={speech.selectedAudioOutput} readSpecialChars={speech.readSpecialChars}
               aiProvider={ai.aiProvider} aiModel={ai.aiModel} aiApiKey={ai.aiApiKey} aiLocalUrl={ai.aiLocalUrl}
               showSaveToast={showSaveToast}
-              onSetThemeBg={theme.setThemeBg} onSetThemeAccent={theme.setThemeAccent}
-              onSetStartWithWindows={speech.setStartWithWindows}
-              onSetSelectedVoiceURI={speech.setSelectedVoiceURI}
-              onSetSelectedAudioInput={speech.setSelectedAudioInput}
-              onSetSelectedAudioOutput={speech.setSelectedAudioOutput}
-              onSetReadSpecialChars={speech.setReadSpecialChars}
-              onSetAiProvider={ai.setAiProvider} onSetAiModel={ai.setAiModel}
-              onSetAiApiKey={ai.setAiApiKey} onSetAiLocalUrl={ai.setAiLocalUrl}
-              onSaveConfigs={() => { ai.handleSaveConfigs(); setShowSaveToast(true); setTimeout(() => setShowSaveToast(false), 3000); }}
+               speechPacks={speech.speechPacks}
+               selectedPackName={speech.selectedPackName} installProgress={speech.installProgress} installingPack={speech.installingPack}
+               onSetThemeBg={theme.setThemeBg} onSetThemeAccent={theme.setThemeAccent}
+               onSetStartWithWindows={speech.setStartWithWindows}
+               onSetSelectedVoiceURI={speech.setSelectedVoiceURI}
+               onSetSelectedAudioInput={speech.setSelectedAudioInput}
+               onSetSelectedAudioOutput={speech.setSelectedAudioOutput}
+               onSetReadSpecialChars={speech.setReadSpecialChars}
+               onSetAiProvider={ai.setAiProvider} onSetAiModel={ai.setAiModel}
+               onSetAiApiKey={ai.setAiApiKey} onSetAiLocalUrl={ai.setAiLocalUrl}
+               onSaveConfigs={() => { ai.handleSaveConfigs(); setShowSaveToast(true); setTimeout(() => setShowSaveToast(false), 3000); }}
+               onCheckSpeechPacks={speech.checkSpeechPacks} onInstallSpeechPack={speech.installSpeechPack} onRemoveSpeechPack={speech.removeSpeechPack}
+               onSelectPack={speech.selectPack}
+               speechPrivacyOk={speech.speechPrivacyOk}
+               onCheckSpeechPrivacy={speech.checkSpeechPrivacy}
+               onAcceptSpeechPrivacy={speech.acceptSpeechPrivacy}
             />
           )}
 

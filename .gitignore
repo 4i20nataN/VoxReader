@@ -38,3 +38,9 @@ coverage/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Speech worker build artifacts
+speech-worker/**/bin/
+speech-worker/**/obj/
+resources/*.exe
+resources/*.pdb

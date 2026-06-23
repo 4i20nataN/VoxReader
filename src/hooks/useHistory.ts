@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HistoryItem } from '../types';
 
-const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
 export function useHistory() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
