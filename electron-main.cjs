@@ -44,9 +44,8 @@ function showWindow() {
 }
 
 app.whenReady().then(() => {
-  // Embedded 16x16 blue play-triangle PNG as base64 (no external file needed)
-  const iconData = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFElEQVR4nGNgIAmoJr/+P1wEsAIA1g4dWTRWz8kAAAAASUVORK5CYII=';
-  const icon = nativeImage.createFromBuffer(Buffer.from(iconData, 'base64'));
+  // Tray icon from file
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'public/icon.png'));
   tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
