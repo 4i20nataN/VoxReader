@@ -18,12 +18,10 @@ class Program
     static async Task<int> Main(string[] args)
     {
         string culture = "pt-BR";
-        int timeout = 15;
 
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--culture" && i + 1 < args.Length) culture = args[i + 1];
-            else if (args[i] == "--timeout" && i + 1 < args.Length) timeout = int.Parse(args[i + 1]);
         }
 
         try
@@ -32,22 +30,21 @@ class Program
             try { recognizer = new SpeechRecognizer(new Windows.Globalization.Language(culture)); }
             catch { recognizer = new SpeechRecognizer(); }
 
-            recognizer.Constraints.Add(new SpeechRecognitionTopicConstraint(
-                SpeechRecognitionScenario.Dictation, "dictation"));
+            recognizer.Constraints.Add(new SpeechRecognitionTopicConstraint(SpeechRecognitionScenario.Dictation, "dictation"));
 
             var compile = await recognizer.CompileConstraintsAsync();
             if (compile.Status != SpeechRecognitionResultStatus.Success)
                 return WriteResult(success: false, error: $"Falha ao compilar: {compile.Status}");
 
-            recognizer.Timeouts.InitialSilenceTimeout = TimeSpan.FromSeconds(5);
-            recognizer.Timeouts.EndSilenceTimeout = TimeSpan.FromSeconds(2);
+            recognizer.Timeouts.InitialSilenceTimeout = TimeSpan.FromSeconds(60);
+            recognizer.Timeouts.EndSilenceTimeout = TimeSpan.FromSeconds(1);
 
-            var result = await recognizer.RecognizeAsync();
-
-            if (result.Status == SpeechRecognitionResultStatus.Success && !string.IsNullOrWhiteSpace(result.Text))
-                return WriteResult(success: true, text: result.Text);
-
-            return WriteResult(success: false, error: $"Nenhuma fala detectada ({result.Status})");
+            while (true)
+            {
+                var result = await recognizer.RecognizeAsync();
+                if (result.Status == SpeechRecognitionResultStatus.Success && !string.IsNullOrWhiteSpace(result.Text))
+                    WriteResult(success: true, text: result.Text);
+            }
         }
         catch (Exception ex)
         {

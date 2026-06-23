@@ -2,7 +2,8 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session, ip
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
+const readline = require('readline');
 
 let tray = null;
 let mainWindow = null;
@@ -194,20 +195,36 @@ function getWorkerPath() {
   return path.join(__dirname, 'resources', 'SpeechWorker.exe');
 }
 
-ipcMain.handle('start-speech-recognition', async (_, culture) => {
+let activeWorker = null;
+let activeWorkerWin = null;
+
+ipcMain.handle('start-speech-recognition', async (event, culture) => {
+  if (activeWorker) { activeWorker.kill(); activeWorker = null; }
   const workerPath = getWorkerPath();
   if (!fs.existsSync(workerPath))
     return { success: false, error: 'Worker não encontrado. Execute dotnet publish em speech-worker/' };
 
-  return new Promise((resolve) => {
-    execFile(workerPath, ['--culture', culture || 'pt-BR', '--timeout', '15'], {
-      timeout: 30000, windowsHide: true
-    }, (error, stdout) => {
-      const lastLine = (stdout || '').trim().split('\n').pop() || '';
-      try { resolve(JSON.parse(lastLine)); }
-      catch { resolve({ success: false, error: 'Resposta inválida: ' + lastLine.slice(0, 200) }); }
-    });
+  activeWorker = spawn(workerPath, ['--culture', culture || 'pt-BR'], { windowsHide: true });
+  activeWorkerWin = event.sender;
+
+  const rl = readline.createInterface({ input: activeWorker.stdout });
+  rl.on('line', (line) => {
+    try {
+      const result = JSON.parse(line);
+      if (event.sender && !event.sender.isDestroyed())
+        event.sender.send('recognition-result', result);
+    } catch {}
   });
+
+  activeWorker.on('error', () => { activeWorker = null; activeWorkerWin = null; });
+  activeWorker.on('exit', () => { activeWorker = null; activeWorkerWin = null; });
+
+  return { success: true };
+});
+
+ipcMain.handle('stop-speech-recognition', async () => {
+  if (activeWorker) { activeWorker.kill(); activeWorker = null; activeWorkerWin = null; }
+  return { success: true };
 });
 
 function showWindow() {

@@ -39,6 +39,8 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
 
   const synthRef = useRef<SpeechSynthesis>(window.speechSynthesis);
   const recognitionRef = useRef<any>(null);
+  const textRef = useRef(text);
+  textRef.current = text;
 
   const vibrate = (ms = 50) => {
     if (navigator.vibrate) { try { navigator.vibrate(ms); } catch { /* noop */ } }
@@ -199,9 +201,12 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     const isElectron = typeof (window as any).require === 'function' && navigator.userAgent.includes('Electron');
 
     if (isElectron) {
-      // Use Windows built-in speech via IPC (offline)
       if (isRecording) {
-        if (recognitionRef.current?.stop) recognitionRef.current.stop();
+        try {
+          const { ipcRenderer } = (window as any).require('electron');
+          await ipcRenderer.invoke('stop-speech-recognition');
+          ipcRenderer.removeAllListeners('recognition-result');
+        } catch {}
         setIsRecording(false);
         onStatusChange('Gravação encerrada');
         return;
@@ -216,18 +221,25 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
       onStatusChange('Preparando reconhecimento de voz do Windows...');
       try {
         const { ipcRenderer } = (window as any).require('electron');
-        const result = await ipcRenderer.invoke('start-speech-recognition', recognitionCulture);
-        if (!result.success) {
-          setMicError(result.error);
+        const start = await ipcRenderer.invoke('start-speech-recognition', recognitionCulture);
+        if (!start.success) {
+          setMicError(start.error);
           onStatusChange('Erro no reconhecimento de voz');
-        } else if (result.text) {
-          onTextChange((text + ' ' + result.text).trim());
-          onStatusChange('Texto capturado: ' + result.text);
+          setIsRecording(false);
+          return;
         }
+        ipcRenderer.on('recognition-result', (_: any, result: any) => {
+          if (result.success && result.text) {
+            const currentText = textRef.current;
+            onTextChange((currentText + ' ' + result.text).trim() + ' ');
+            textRef.current = (currentText + ' ' + result.text).trim() + ' ';
+            onStatusChange('Fala capturada');
+          }
+        });
       } catch {
         setMicError('Erro ao usar o reconhecimento de voz do Windows.');
+        setIsRecording(false);
       }
-      setIsRecording(false);
       return;
     }
 
