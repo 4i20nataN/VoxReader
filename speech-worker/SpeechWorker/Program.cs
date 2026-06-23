@@ -8,6 +8,7 @@ public class SpeechResult
     [JsonPropertyName("success")] public bool Success { get; set; }
     [JsonPropertyName("text")] public string? Text { get; set; }
     [JsonPropertyName("error")] public string? Error { get; set; }
+    [JsonPropertyName("partial")] public bool Partial { get; set; }
 }
 
 [JsonSerializable(typeof(SpeechResult))]
@@ -39,11 +40,20 @@ class Program
             recognizer.Timeouts.InitialSilenceTimeout = TimeSpan.FromSeconds(60);
             recognizer.Timeouts.EndSilenceTimeout = TimeSpan.FromSeconds(1);
 
+            recognizer.HypothesisGenerated += (_, args) =>
+            {
+                WriteResult(success: true, text: args.Hypothesis.Text, partial: true);
+                Console.Out.Flush();
+            };
+
             while (true)
             {
                 var result = await recognizer.RecognizeAsync();
                 if (result.Status == SpeechRecognitionResultStatus.Success && !string.IsNullOrWhiteSpace(result.Text))
+                {
                     WriteResult(success: true, text: result.Text);
+                    Console.Out.Flush();
+                }
             }
         }
         catch (Exception ex)
@@ -52,10 +62,10 @@ class Program
         }
     }
 
-    static int WriteResult(bool success, string? text = null, string? error = null)
+    static int WriteResult(bool success, string? text = null, string? error = null, bool partial = false)
     {
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
-            new SpeechResult { Success = success, Text = text, Error = error },
+            new SpeechResult { Success = success, Text = text, Error = error, Partial = partial },
             AppJsonContext.Default.SpeechResult));
         return success ? 0 : 1;
     }

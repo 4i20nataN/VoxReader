@@ -229,7 +229,9 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
           return;
         }
         ipcRenderer.on('recognition-result', (_: any, result: any) => {
-          if (result.success && result.text) {
+          if (result.partial) {
+            onStatusChange('Ouvindo: ' + result.text);
+          } else if (result.success && result.text) {
             const currentText = textRef.current;
             onTextChange((currentText + ' ' + result.text).trim() + ' ');
             textRef.current = (currentText + ' ' + result.text).trim() + ' ';
