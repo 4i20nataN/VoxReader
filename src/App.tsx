@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, History, Save, Settings, Volume2, Check } from 'lucide-react';
 import { getThemeStyles } from './themes';
 import { SetupWizard } from './components/SetupWizard';
@@ -15,10 +15,16 @@ import { useAI } from './hooks/useAI';
 import { useHistory } from './hooks/useHistory';
 import Tesseract from 'tesseract.js';
 
+function getSavedTab(): 'editor' | 'history' | 'saved' | 'settings' {
+  const saved = localStorage.getItem('activeTab');
+  if (saved === 'editor' || saved === 'history' || saved === 'saved' || saved === 'settings') return saved;
+  return 'editor';
+}
+
 export default function App() {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => localStorage.getItem('editorText') || '');
   const [status, setStatus] = useState('Aguardando...');
-  const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'saved' | 'settings'>('editor');
+  const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'saved' | 'settings'>(getSavedTab);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
@@ -28,6 +34,9 @@ export default function App() {
   const speech = useSpeech({ text, onTextChange: setText, onStatusChange: setStatus, onAddHistoryItem: (item) => history.setHistory(prev => [item, ...prev].slice(0, 100)) });
   const ai = useAI();
   const history = useHistory();
+
+  useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem('editorText', text); }, [text]);
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const wpm = 180 * speech.rate;

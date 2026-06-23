@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, dialog } = require('electron');
 const path = require('path');
 
 let tray = null;
@@ -38,28 +38,40 @@ function createWindow() {
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
-      // Destroy window entirely to free renderer memory
-      mainWindow.destroy();
-      mainWindow = null;
+      dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Fechar', 'Cancelar'],
+        defaultId: 1,
+        title: 'Leitor Inteligente',
+        message: 'O app continuará rodando na bandeja.',
+        detail: 'Clique com botão direito no ícone da bandeja para sair completamente.'
+      }).then(({ response }) => {
+        if (response === 0) {
+          mainWindow.destroy();
+          mainWindow = null;
+        }
+      });
     }
   });
 }
 
+function showWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
 app.whenReady().then(() => {
-  createWindow();
+  // Start only in tray — no window created until user opens it
 
   const icon = nativeImage.createFromPath(path.join(__dirname, 'public/icon.png'));
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Abrir Leitor Inteligente', click: () => {
-       if (!mainWindow || mainWindow.isDestroyed()) {
-         createWindow();
-       } else {
-         mainWindow.show();
-         mainWindow.focus();
-       }
-    }},
+    { label: 'Abrir Leitor Inteligente', click: showWindow },
     { type: 'separator' },
     { label: 'Sair e Encerrar', click: () => {
         app.isQuitting = true;
@@ -70,24 +82,16 @@ app.whenReady().then(() => {
   tray.setToolTip('Leitor Inteligente');
   tray.setContextMenu(contextMenu);
 
-  tray.on('click', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow();
-    } else if (mainWindow.isVisible()) {
-      mainWindow.hide();
-    } else {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+  tray.on('click', showWindow);
 
-  app.on('activate', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow();
-    } else {
-      mainWindow.show();
-    }
-  });
+  // Global shortcut: Ctrl+Shift+Space to open window
+  globalShortcut.register('CommandOrControl+Shift+Space', showWindow);
+
+  app.on('activate', showWindow);
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {
