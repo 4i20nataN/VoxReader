@@ -1,15 +1,20 @@
 {
-  "name": "react-example",
+  "name": "leitor-texto",
+  "description": "Leitor Inteligente - Síntese de voz e utilitários de texto",
+  "author": "Usuário",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron-main.cjs",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "desktop:build": "npm run build && npx electron-builder -c.extraMetadata.main=electron-main.cjs",
+    "desktop:pack": "npm run build && npx @electron/packager . \"Leitor Inteligente\" --platform=win32 --arch=x64 --out=\"$env:TEMP/leitor-release\" --overwrite && Copy-Item -Recurse -Force \"$env:TEMP/leitor-release/*\" release/",
+    "desktop:installer": "npx electron-builder --prepackaged=\"release/Leitor Inteligente-win32-x64\" --win nsis",
+    "desktop:build": "npm run desktop:pack && npm run desktop:installer",
     "mobile:sync": "npm run build && npx cap sync",
     "mobile:android": "npx cap run android"
   },
@@ -36,10 +41,35 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-packager": "^17.1.2",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
+  },
+  "build": {
+    "appId": "com.leitor.texto",
+    "productName": "Leitor Inteligente",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron-main.cjs",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

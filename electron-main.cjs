@@ -1,8 +1,14 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 
 let tray = null;
 let mainWindow = null;
+
+// Chromium flags for lower memory usage
+app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -11,16 +17,16 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     show: false,
-    frame: true, // Native window frame
+    frame: true,
     autoHideMenuBar: true,
+    backgroundColor: '#0a0a0f',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
     },
-    icon: path.join(__dirname, 'public/vite.svg')
+    icon: path.join(__dirname, 'public/icon.svg')
   });
 
-  // Load the web app
   mainWindow.loadURL('http://localhost:3000').catch(() => {
      mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
   });
@@ -32,33 +38,27 @@ function createWindow() {
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
-      mainWindow.hide();
+      // Destroy window entirely to free renderer memory
+      mainWindow.destroy();
+      mainWindow = null;
     }
-    return false;
   });
 }
 
 app.whenReady().then(() => {
   createWindow();
 
-  // Setup Tray
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'public/vite.svg'));
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'public/icon.png'));
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
-  
+
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Abrir Leitor Inteligente', click: () => {
-       if (mainWindow) {
+       if (!mainWindow || mainWindow.isDestroyed()) {
+         createWindow();
+       } else {
          mainWindow.show();
          mainWindow.focus();
        }
-    }},
-    { type: 'separator' },
-    { label: 'Tocar / Pausar Leitura', click: () => {
-        if (mainWindow) {
-          mainWindow.webContents.executeJavaScript(`
-            if (window.togglePlayPause) window.togglePlayPause();
-          `);
-        }
     }},
     { type: 'separator' },
     { label: 'Sair e Encerrar', click: () => {
@@ -67,11 +67,13 @@ app.whenReady().then(() => {
     }}
   ]);
 
-  tray.setToolTip('Leitor Inteligente - Otimizado');
+  tray.setToolTip('Leitor Inteligente');
   tray.setContextMenu(contextMenu);
 
   tray.on('click', () => {
-    if (mainWindow.isVisible()) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow();
+    } else if (mainWindow.isVisible()) {
       mainWindow.hide();
     } else {
       mainWindow.show();
@@ -80,7 +82,11 @@ app.whenReady().then(() => {
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow();
+    } else {
+      mainWindow.show();
+    }
   });
 });
 
