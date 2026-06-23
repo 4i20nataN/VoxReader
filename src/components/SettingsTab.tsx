@@ -89,7 +89,7 @@ export function SettingsTab(props: SettingsTabProps) {
                 <div className={cn("w-10 h-6 rounded-full transition-colors", startWithWindows ? "bg-[var(--accent-hover)]" : "bg-[var(--bg-panel)] border border-[var(--border-color)]")}></div>
                 <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white transition-transform", startWithWindows ? "left-5" : "left-1")}></div>
               </div>
-              <span className="text-sm text-[var(--text-main)] group-hover:text-[var(--accent-hover)] transition-colors">Iniciar o leitor junto com o Windows<br/><span className="text-xs text-[var(--text-muted)] font-normal">(Requer instalação do PWA)</span></span>
+              <span className="text-sm text-[var(--text-main)] group-hover:text-[var(--accent-hover)] transition-colors">Iniciar o leitor junto com o Windows<br/><span className="text-xs text-[var(--text-muted)] font-normal">(Funciona apenas na versão instalada)</span></span>
             </label>
           </div>
 

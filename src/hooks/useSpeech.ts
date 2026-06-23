@@ -23,6 +23,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioInput, setSelectedAudioInput] = useState<string>('default');
   const [selectedAudioOutput, setSelectedAudioOutput] = useState<string>('default');
+  const [micError, setMicError] = useState<string | null>(null);
 
   const synthRef = useRef<SpeechSynthesis>(window.speechSynthesis);
   const recognitionRef = useRef<any>(null);
@@ -88,7 +89,14 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
       };
       recognition.onerror = (event: any) => {
         if (event.error !== 'no-speech') {
-          onStatusChange(event.error === 'not-allowed' ? 'Permissão do Microfone Negada.' : `Mic status: ${event.error}`);
+          const err = event.error;
+          if (err === 'not-allowed') setMicError('Permissão do microfone negada. Acesse as configurações de som do Windows ou a barra de endereço do navegador para permitir o acesso ao microfone.');
+          else if (err === 'aborted') setMicError('A gravação foi interrompida. Verifique se o microfone está sendo usado por outro aplicativo.');
+          else if (err === 'audio-capture') setMicError('Nenhum microfone encontrado. Conecte um microfone ao computador e tente novamente.');
+          else if (err === 'network') setMicError('O reconhecimento de fala requer conexão com a internet.\n\nNa versão para Windows, é necessário configurar a chave de API do Google como variável de ambiente do sistema (GOOGLE_API_KEY). Caso contrário, use o app pelo navegador Chrome para esta função.');
+          else if (err === 'service-not-allowed') setMicError('O serviço de reconhecimento de fala não está disponível no momento.');
+          else setMicError(`Erro no reconhecimento de voz: ${err}`);
+          onStatusChange('Erro no microfone');
           setIsRecording(false);
         }
       };
@@ -105,7 +113,13 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   // Persistence effects
   useEffect(() => { localStorage.setItem('reader_rate', rate.toString()); }, [rate]);
   useEffect(() => { localStorage.setItem('reader_voice', selectedVoiceURI); }, [selectedVoiceURI]);
-  useEffect(() => { localStorage.setItem('reader_win_start', startWithWindows ? 'true' : 'false'); }, [startWithWindows]);
+  useEffect(() => {
+    localStorage.setItem('reader_win_start', startWithWindows ? 'true' : 'false');
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      ipcRenderer.send('set-auto-launch', startWithWindows);
+    } catch { /* Not in Electron */ }
+  }, [startWithWindows]);
 
   const handleRead = (customText?: string) => {
     vibrate(50);
@@ -170,8 +184,38 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
 
   const toggleRecording = async () => {
     vibrate(50);
+    const isElectron = typeof (window as any).require === 'function' && navigator.userAgent.includes('Electron');
+
+    if (isElectron) {
+      // Use Windows built-in speech via IPC (offline)
+      if (isRecording) {
+        if (recognitionRef.current?.stop) recognitionRef.current.stop();
+        setIsRecording(false);
+        onStatusChange('Gravação encerrada');
+        return;
+      }
+      setIsRecording(true);
+      onStatusChange('Preparando reconhecimento de voz do Windows...');
+      try {
+        const { ipcRenderer } = (window as any).require('electron');
+        const result = await ipcRenderer.invoke('start-speech-recognition');
+        if (result.error) {
+          setMicError(result.error);
+          onStatusChange('Erro no reconhecimento de voz');
+        } else if (result.text) {
+          onTextChange((text + ' ' + result.text).trim());
+          onStatusChange('Texto capturado: ' + result.text);
+        }
+      } catch {
+        setMicError('Erro ao usar o reconhecimento de voz do Windows.');
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    // Browser: use Web Speech API
     if (!recognitionRef.current) {
-      onStatusChange('Reconhecimento não suportado no navegador atual.');
+      setMicError('Reconhecimento de fala não é suportado neste navegador. Experimente usar Google Chrome ou Microsoft Edge.');
       return;
     }
     if (isRecording) {
@@ -179,8 +223,14 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
       setIsRecording(false);
       onStatusChange('Gravação encerrada');
     } else {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const mics = devices.filter(d => d.kind === 'audioinput');
+      if (mics.length === 0) {
+        setMicError('Nenhum microfone encontrado. Conecte um microfone ao computador e tente novamente.');
+        return;
+      }
       try { await navigator.mediaDevices.getUserMedia({ audio: true }); }
-      catch { onStatusChange('Microfone bloqueado. Permita o acesso na barra de endereço.'); return; }
+      catch { setMicError('Permissão do microfone negada. Permita o acesso nas configurações do Windows ou em "Configurações do site" no navegador.'); return; }
       try {
         recognitionRef.current.start();
         setIsRecording(true);
@@ -195,6 +245,8 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
       }
     }
   };
+
+  const clearMicError = () => setMicError(null);
 
   // Global Play/Pause wrapper for Electron
   useEffect(() => {
@@ -216,6 +268,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     audioInputs, audioOutputs, selectedAudioInput, setSelectedAudioInput,
     selectedAudioOutput, setSelectedAudioOutput,
     setSelectedVoiceURI, setRate, activeVoiceName,
-    handleRead, handlePause, handleStop, toggleRecording
+    handleRead, handlePause, handleStop, toggleRecording,
+    micError, clearMicError
   };
 }

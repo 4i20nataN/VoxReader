@@ -5,7 +5,7 @@ export const backgroundPalettes: Record<ThemeBg, any> = {
   dark: { '--bg-app': '#0F1115', '--bg-sidebar': '#0A0C10', '--bg-header': '#12141C', '--bg-panel': '#1A1D26', '--border-color': '#2D3139', '--border-hover': '#3D4455', '--text-main': '#E2E8F0', '--text-muted': '#64748B', '--text-darker': '#475569', '--text-light': '#94A3B8', '--is-dark': '1', '--bg-input': '#1A1D26' },
   amoled: { '--bg-app': '#000000', '--bg-sidebar': '#000000', '--bg-header': '#000000', '--bg-panel': '#09090B', '--border-color': '#27272A', '--border-hover': '#3F3F46', '--text-main': '#FAFAFA', '--text-muted': '#A1A1AA', '--text-darker': '#71717A', '--text-light': '#D4D4D8', '--is-dark': '1', '--bg-input': '#09090B' },
   dim: { '--bg-app': '#1C1C1E', '--bg-sidebar': '#18181A', '--bg-header': '#18181A', '--bg-panel': '#2C2C2E', '--border-color': '#3A3A3C', '--border-hover': '#48484A', '--text-main': '#F2F2F7', '--text-muted': '#8E8E93', '--text-darker': '#636366', '--text-light': '#AEAEB2', '--is-dark': '1', '--bg-input': '#2C2C2E' },
-  light: { '--bg-app': '#F8FAFC', '--bg-sidebar': '#F1F5F9', '--bg-header': '#FFFFFF', '--bg-panel': '#FFFFFF', '--border-color': '#E2E8F0', '--border-hover': '#CBD5E1', '--text-main': '#0F172A', '--text-muted': '#64748B', '--text-darker': '#94A3B8', '--text-light': '#475569', '--is-dark': '0', '--bg-input': '#FFFFFF' }
+  light: { '--bg-app': '#F3EFEA', '--bg-sidebar': '#EAE5DF', '--bg-header': '#FBF9F6', '--bg-panel': '#FBF9F6', '--border-color': '#DDD6CD', '--border-hover': '#CCC4BA', '--text-main': '#1C1B2E', '--text-muted': '#78716C', '--text-darker': '#A8A29E', '--text-light': '#57534E', '--is-dark': '0', '--bg-input': '#FBF9F6' }
 };
 
 export const accentPalettes: Record<ThemeAccent, any> = {

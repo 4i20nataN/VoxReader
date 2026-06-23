@@ -1,5 +1,6 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session, ipcMain } = require('electron');
 const path = require('path');
+const { execFile } = require('child_process');
 
 let tray = null;
 let mainWindow = null;
@@ -8,7 +9,12 @@ app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
-app.commandLine.appendSwitch('enable-features', 'WebSpeech,NetworkService');
+app.commandLine.appendSwitch('enable-features', 'WebSpeech');
+app.commandLine.appendSwitch('disable-features', 'NetworkService');
+// Pass Google Speech API key from env to Chromium if set
+if (process.env.GOOGLE_API_KEY) {
+  app.commandLine.appendSwitch('speech-api-key', process.env.GOOGLE_API_KEY);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -34,6 +40,59 @@ function createWindow() {
     }
   });
 }
+
+// Start with Windows IPC handler
+ipcMain.on('set-auto-launch', (_, enable) => {
+  app.setLoginItemSettings({ openAtLogin: enable, args: ['--hidden'] });
+});
+
+// Windows built-in speech recognition (offline, via PowerShell + .NET System.Speech)
+ipcMain.handle('start-speech-recognition', async () => {
+  const psScript = `
+Add-Type -AssemblyName System.Speech
+try {
+  $culture = [System.Globalization.CultureInfo]::GetCultureInfo('pt-BR')
+  $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine($culture)
+  $rec.SetInputToDefaultAudioDevice()
+  $grammar = New-Object System.Speech.Recognition.DictationGrammar
+  $rec.LoadGrammar($grammar)
+  $result = $rec.Recognize()
+  if ($result) {
+    Write-Output $result.Text
+  } else {
+    Write-Output '__NO_SPEECH__'
+  }
+} catch {
+  Write-Output "__ERROR__: $_"
+}
+`;
+  const buf = Buffer.from(psScript, 'ucs2');
+  const encoded = buf.toString('base64');
+
+  return new Promise((resolve) => {
+    const child = execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 30000,
+      windowsHide: true
+    }, (error, stdout, stderr) => {
+      const output = (stdout || '').trim();
+      if (output.startsWith('__ERROR__')) {
+        const errMsg = output.replace('__ERROR__', '').trim();
+        if (errMsg.includes('System.Speech')) {
+          resolve({ error: 'Reconhecimento de voz do Windows não disponível. Instale o pacote de idioma de Fala no Windows: Configurações > Hora e Idioma > Fala.' });
+        } else if (errMsg.includes('CultureNotFound') || errMsg.includes('pt-BR') || errMsg.includes('No recognizer')) {
+          resolve({ error: 'Pacote de reconhecimento de fala para Português não encontrado. Instale em: Configurações > Hora e Idioma > Fala > Baixar pacote de reconhecimento de fala.' });
+        } else {
+          resolve({ error: errMsg });
+        }
+      } else if (output === '__NO_SPEECH__' || !output) {
+        resolve({ error: 'Nenhuma fala detectada. Tente novamente.' });
+      } else {
+        resolve({ text: output });
+      }
+    });
+    child.on('error', () => resolve({ error: 'Erro ao iniciar reconhecimento de voz do Windows.' }));
+  });
+});
 
 function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {

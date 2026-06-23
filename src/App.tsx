@@ -130,6 +130,21 @@ export default function App() {
       />
       )}
 
+      {speech.micError && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={speech.clearMicError}>
+        <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-2xl p-6 max-w-md mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+            </div>
+            <h3 className="text-lg font-semibold text-[var(--text-main)]">Microfone</h3>
+          </div>
+          <p className="text-sm text-[var(--text-dim)] leading-relaxed mb-6">{speech.micError}</p>
+          <button onClick={speech.clearMicError} className="w-full py-2.5 rounded-xl bg-[var(--accent-color)] text-white font-medium text-sm hover:brightness-110 transition-all">Entendi</button>
+        </div>
+      </div>
+      )}
+
       <nav className="shrink-0 order-last md:order-first w-full md:w-20 h-16 md:h-auto bg-[var(--bg-sidebar)] border-t md:border-t-0 md:border-r border-[var(--border-color)] flex flex-row md:flex-col justify-around md:justify-start items-center md:py-8 z-30 transition-colors duration-300">
         <div className="hidden md:flex w-12 h-12 bg-[var(--accent-color)] rounded-xl items-center justify-center shadow-[0_0_15px_var(--accent-glow)] mb-8">
           <Volume2 size={24} className="text-white" />
