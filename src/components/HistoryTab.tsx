@@ -35,8 +35,8 @@ export function HistoryTab({
             <button onClick={() => onSetHistoryFilter('favorites')} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1", historyFilter === 'favorites' ? "bg-amber-500/10 text-amber-500" : "text-[var(--text-muted)] hover:bg-[var(--bg-panel)]")}><Star size={12}/> Favoritos</button>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-[var(--text-muted)] flex items-center gap-1"><ArrowDownWideNarrow size={14}/> Ordenar:</span>
-            <select value={historySort} onChange={(e) => onSetHistorySort(e.target.value)} className="bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-main)] rounded p-1 outline-none focus:border-[var(--accent-hover)]">
+            <label htmlFor="history-sort" className="text-[var(--text-muted)] flex items-center gap-1"><ArrowDownWideNarrow size={14}/> Ordenar:</label>
+            <select id="history-sort" value={historySort} onChange={(e) => onSetHistorySort(e.target.value)} className="bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-main)] rounded p-1 outline-none focus:border-[var(--accent-hover)]">
               <option value="newest">Mais Recentes</option>
               <option value="oldest">Mais Antigos</option>
               <option value="longest">Mais Longos</option>

@@ -139,9 +139,9 @@ export function SettingsTab(props: SettingsTabProps) {
           {/* Voice Engine */}
           <div className="space-y-4">
             <h3 className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] pb-2 mb-4">Áudio Engine</h3>
-            <label className="block text-sm font-medium text-[var(--text-light)]">Motor de Voz Instalado (Offline)</label>
+            <label className="block text-sm font-medium text-[var(--text-light)]" htmlFor="voice-select">Motor de Voz Instalado (Offline)</label>
             <div className="relative">
-              <select
+              <select id="voice-select"
                 value={selectedVoiceURI}
                 onChange={(e) => onSetSelectedVoiceURI(e.target.value)}
                 className="w-full appearance-none bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-3 px-4 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] focus:ring-1 focus:ring-[var(--accent-hover)] transition-colors shadow-sm"
@@ -161,8 +161,8 @@ export function SettingsTab(props: SettingsTabProps) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Microfone Recomendado (Entrada)</label>
-                <select value={selectedAudioInput} onChange={(e) => onSetSelectedAudioInput(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
+                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5" htmlFor="audio-input">Microfone Recomendado (Entrada)</label>
+                <select id="audio-input" value={selectedAudioInput} onChange={(e) => onSetSelectedAudioInput(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
                   <option value="default">Padrão do Sistema</option>
                   {audioInputs.map(device => (
                     <option key={device.deviceId} value={device.deviceId}>{device.label || `Microfone ${device.deviceId.slice(0, 5)}...`}</option>
@@ -170,8 +170,8 @@ export function SettingsTab(props: SettingsTabProps) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Saída de Áudio</label>
-                <select value={selectedAudioOutput} onChange={(e) => onSetSelectedAudioOutput(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
+                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5" htmlFor="audio-output">Saída de Áudio</label>
+                <select id="audio-output" value={selectedAudioOutput} onChange={(e) => onSetSelectedAudioOutput(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
                   <option value="default">Padrão do Sistema</option>
                   {audioOutputs.map(device => (
                     <option key={device.deviceId} value={device.deviceId}>{device.label || `Saída ${device.deviceId.slice(0, 5)}...`}</option>
@@ -198,28 +198,28 @@ export function SettingsTab(props: SettingsTabProps) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Provedor</label>
-                <select value={aiProvider} onChange={(e) => onSetAiProvider(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
+                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5" htmlFor="ai-provider">Provedor</label>
+                <select id="ai-provider" value={aiProvider} onChange={(e) => onSetAiProvider(e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm">
                   <option value="google">Google Gemini API</option>
                   <option value="openrouter">OpenRouter API</option>
                   <option value="local">Modelo Local (Ollama/LM Studio)</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Modelo</label>
-                <DebouncedInput type="text" value={aiModel} onChange={onSetAiModel} placeholder="ex: gemini-2.5-flash" className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm" />
+                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5" htmlFor="ai-model">Modelo</label>
+                <DebouncedInput id="ai-model" type="text" value={aiModel} onChange={onSetAiModel} placeholder="ex: gemini-2.5-flash" className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm" />
               </div>
             </div>
 
             {aiProvider === 'local' ? (
               <div>
-                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">URL da API Local</label>
-                <DebouncedInput type="text" value={aiLocalUrl} onChange={onSetAiLocalUrl} placeholder="http://localhost:11434/v1/chat/completions" className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm font-mono" />
+                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5" htmlFor="ai-local-url">URL da API Local</label>
+                <DebouncedInput id="ai-local-url" type="text" value={aiLocalUrl} onChange={onSetAiLocalUrl} placeholder="http://localhost:11434/v1/chat/completions" className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm font-mono" />
               </div>
             ) : (
               <div>
-                <label className="block text-xs font-medium text-[var(--text-light)] mb-1.5">Chave da API (Salva no navegador)</label>
-                <DebouncedInput type="password" value={aiApiKey} onChange={onSetAiApiKey} placeholder="sk-..." className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm font-mono" />
+<label className="block text-xs font-medium text-[var(--text-light)] mb-1.5" htmlFor="ai-api-key">Chave da API (Salva no navegador)</label>
+                  <form onSubmit={e => e.preventDefault()}><DebouncedInput id="ai-api-key" type="password" value={aiApiKey} onChange={onSetAiApiKey} placeholder="sk-..." className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-2.5 px-3 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] text-sm font-mono" /></form>
               </div>
             )}
             <p className="text-xs text-[var(--text-darker)] leading-relaxed">Você pode usar I.A. para resumir textos no Editor. Suas credenciais nunca saem do seu navegador (Client-Side).</p>

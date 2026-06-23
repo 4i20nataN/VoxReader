@@ -39,6 +39,7 @@ export function SavedTab({ savedTexts, onDeleteAll, onDeleteItem, onSendToEditor
                   </h3>
                   <button
                     onClick={() => onDeleteItem(item.id)}
+                    aria-label="Excluir item salvo"
                     className="text-[var(--text-muted)] hover:text-red-500 transition-colors focus:outline-none"
                   >
                     <Trash2 size={16} />

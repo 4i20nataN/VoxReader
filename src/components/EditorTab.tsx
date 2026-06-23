@@ -89,7 +89,7 @@ export function EditorTab({
             <ImageIcon size={14} className="inline-block" /> Img
             <input type="file" accept="image/*" className="hidden" onChange={onImageUpload} />
           </label>
-          <button onClick={() => { clearTimeout(debounceRef.current); onTextChange(''); }} className="flex-none items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded border border-red-500/20 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50">
+          <button onClick={() => { clearTimeout(debounceRef.current); onTextChange(''); }} aria-label="Limpar texto" className="flex-none items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded border border-red-500/20 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50">
             <Trash2 size={14} />
           </button>
         </div>
@@ -171,16 +171,16 @@ export function EditorTab({
       <div className="mt-4 md:mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 md:gap-6 bg-[var(--bg-header)] p-4 rounded-xl border border-[var(--border-color)] shrink-0 transition-colors duration-300">
         <div className="flex items-center gap-4 flex-1 w-full sm:max-w-xs xl:max-w-sm">
           <div className="flex flex-col gap-2 w-full">
-            <label className="text-[10px] uppercase font-bold text-[var(--text-muted)] flex justify-between">
+            <label htmlFor="speed-range" className="text-[10px] uppercase font-bold text-[var(--text-muted)] flex justify-between">
               <span>Velocidade de Leitura</span>
               <span className="text-[var(--accent-hover)]">{rate}x</span>
             </label>
-            <input type="range" min="0.5" max="2.5" step="0.1" value={rate} onChange={(e) => onSetRate(parseFloat(e.target.value))} className="w-full h-1.5 bg-[var(--border-hover)] rounded appearance-none cursor-pointer outline-none transition-colors" />
+            <input id="speed-range" type="range" min="0.5" max="2.5" step="0.1" value={rate} onChange={(e) => onSetRate(parseFloat(e.target.value))} className="w-full h-1.5 bg-[var(--border-hover)] rounded appearance-none cursor-pointer outline-none transition-colors" />
           </div>
         </div>
 
         <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto justify-center">
-          <button onClick={onStop} disabled={!isSpeaking && !isPaused} className="w-12 h-12 flex items-center justify-center rounded-xl bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-hover)] disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-hover)]">
+          <button onClick={onStop} disabled={!isSpeaking && !isPaused} aria-label="Parar leitura" className="w-12 h-12 flex items-center justify-center rounded-xl bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-hover)] disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-hover)]">
             <Square size={18} fill="currentColor" />
           </button>
           {!isSpeaking ? (

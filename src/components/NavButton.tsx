@@ -5,6 +5,7 @@ export function NavButton({ active, onClick, icon, label }: { active: boolean, o
   return (
     <button
       onClick={onClick}
+      aria-label={label}
       className={cn(
         "p-2.5 md:p-3 rounded-xl transition-all duration-200 border group focus:outline-none flex-1 md:flex-none flex items-center justify-center relative active:scale-95",
         active 
