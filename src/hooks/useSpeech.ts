@@ -230,7 +230,8 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
         }
         ipcRenderer.on('recognition-result', (_: any, result: any) => {
           if (result.partial) {
-            onStatusChange('Ouvindo: ' + result.text);
+            const text = result.text || '';
+            onStatusChange('Ouvindo: ' + (text.length > 80 ? '...' + text.slice(-80) : text));
           } else if (result.success && result.text) {
             const currentText = textRef.current;
             onTextChange((currentText + ' ' + result.text).trim() + ' ');

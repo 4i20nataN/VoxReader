@@ -75,7 +75,7 @@ export function EditorTab({
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 shrink-0 gap-3">
         <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest flex items-center gap-2">
           transcrição & edição
-          <span className="hidden sm:inline-block text-[10px] font-normal text-[var(--text-darker)] normal-case bg-[var(--bg-panel)] px-2 py-0.5 rounded border border-[var(--border-color)]">{status}</span>
+          <span className="hidden sm:inline-block text-[10px] font-normal text-[var(--text-darker)] normal-case bg-[var(--bg-panel)] px-2 py-0.5 rounded border border-[var(--border-color)] max-w-[280px] truncate">{status}</span>
         </span>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button onClick={onClipboard} className="flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-1.5 bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] rounded border border-[var(--border-color)] text-xs text-[var(--text-main)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent-transparent)]">

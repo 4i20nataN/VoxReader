@@ -40,8 +40,13 @@ class Program
             recognizer.Timeouts.InitialSilenceTimeout = TimeSpan.FromSeconds(60);
             recognizer.Timeouts.EndSilenceTimeout = TimeSpan.FromSeconds(1);
 
+            var lastPartial = DateTime.MinValue;
+
             recognizer.HypothesisGenerated += (_, args) =>
             {
+                var now = DateTime.UtcNow;
+                if ((now - lastPartial).TotalMilliseconds < 300) return;
+                lastPartial = now;
                 WriteResult(success: true, text: args.Hypothesis.Text, partial: true);
                 Console.Out.Flush();
             };
