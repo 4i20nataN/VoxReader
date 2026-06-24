@@ -4,15 +4,42 @@ const fs = require('fs');
 const os = require('os');
 const { execFile, spawn } = require('child_process');
 const readline = require('readline');
+const http = require('http');
 
 let tray = null;
 let mainWindow = null;
+let staticServer = null;
 
 app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
 app.commandLine.appendSwitch('enable-features', 'WebSpeech');
 app.commandLine.appendSwitch('disable-features', 'NetworkService');
+
+const MIME = {
+  '.html': 'text/html;charset=utf-8',
+  '.js': 'application/javascript;charset=utf-8',
+  '.css': 'text/css;charset=utf-8',
+  '.json': 'application/json;charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
+
+function serveDist(cb) {
+  const dist = path.join(__dirname, 'dist');
+  const server = http.createServer((req, res) => {
+    const uri = decodeURIComponent(req.url).split('?')[0];
+    let filePath = path.join(dist, uri === '/' ? 'index.html' : uri);
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end('404'); return; }
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+      res.end(data);
+    });
+  });
+  server.listen(0, '127.0.0.1', () => cb(server));
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -26,10 +53,16 @@ function createWindow() {
 
   if (!app.isPackaged) {
     mainWindow.loadURL('http://localhost:3000').catch(() => {
-      mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+      serveDist((server) => {
+        staticServer = server;
+        mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
+      });
     });
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+    serveDist((server) => {
+      staticServer = server;
+      mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
+    });
   }
 
   mainWindow.on('ready-to-show', () => mainWindow.show());
@@ -311,5 +344,8 @@ app.whenReady().then(() => {
   app.on('activate', showWindow);
 });
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  if (staticServer) { staticServer.close(); staticServer = null; }
+});
 app.on('window-all-closed', () => {});
