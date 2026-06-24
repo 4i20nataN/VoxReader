@@ -10,7 +10,6 @@ let mainWindow = null;
 
 app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
-app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
 app.commandLine.appendSwitch('enable-features', 'WebSpeech');
 app.commandLine.appendSwitch('disable-features', 'NetworkService');
@@ -25,9 +24,13 @@ function createWindow() {
     icon: path.join(__dirname, 'public/icon.svg')
   });
 
-  mainWindow.loadURL('http://localhost:3000').catch(() => {
-     mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
-  });
+  if (!app.isPackaged) {
+    mainWindow.loadURL('http://localhost:3000').catch(() => {
+      mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+    });
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+  }
 
   mainWindow.on('ready-to-show', () => mainWindow.show());
 
