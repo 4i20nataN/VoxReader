@@ -14,6 +14,8 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [readingCharIndex, setReadingCharIndex] = useState(0);
+  const [readingCharLength, setReadingCharLength] = useState(0);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
   const [rate, setRate] = useState(1);
@@ -170,11 +172,16 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     utterance.onstart = () => {
       setIsSpeaking(true);
       setIsPaused(false);
+      setReadingCharIndex(0);
       onStatusChange('Leitura em andamento...');
       onAddHistoryItem({ id: Date.now().toString(), text: readText.trim(), date: Date.now(), type: 'read', favorite: false });
     };
-    utterance.onend = () => { setIsSpeaking(false); setIsPaused(false); onStatusChange('Leitura concluída'); };
-    utterance.onerror = () => { setIsSpeaking(false); setIsPaused(false); onStatusChange('Leitura interrompida'); };
+    utterance.onboundary = (e: SpeechSynthesisEvent) => {
+      setReadingCharIndex(e.charIndex);
+      setReadingCharLength(e.charLength || 0);
+    };
+    utterance.onend = () => { setIsSpeaking(false); setIsPaused(false); setReadingCharIndex(0); setReadingCharLength(0); onStatusChange('Leitura concluída'); };
+    utterance.onerror = () => { setIsSpeaking(false); setIsPaused(false); setReadingCharIndex(0); setReadingCharLength(0); onStatusChange('Leitura interrompida'); };
     synthRef.current.speak(utterance);
   };
 
@@ -394,7 +401,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   const activeVoiceName = voices.find(v => v.voiceURI === selectedVoiceURI)?.name || 'Voz Padrão';
 
   return {
-    isSpeaking, isPaused, isRecording, voices, selectedVoiceURI, rate,
+    isSpeaking, isPaused, isRecording, readingCharIndex, readingCharLength, voices, selectedVoiceURI, rate,
     startWithWindows, setStartWithWindows, readSpecialChars, setReadSpecialChars,
     audioInputs, audioOutputs, selectedAudioInput, setSelectedAudioInput,
     selectedAudioOutput, setSelectedAudioOutput,

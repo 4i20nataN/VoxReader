@@ -4,44 +4,18 @@ const fs = require('fs');
 const os = require('os');
 const { execFile, spawn } = require('child_process');
 const readline = require('readline');
-const http = require('http');
 
 let tray = null;
 let mainWindow = null;
-let staticServer = null;
 
 app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
 app.commandLine.appendSwitch('enable-features', 'WebSpeech');
-app.commandLine.appendSwitch('disable-features', 'NetworkService');
 
-const MIME = {
-  '.html': 'text/html;charset=utf-8',
-  '.js': 'application/javascript;charset=utf-8',
-  '.css': 'text/css;charset=utf-8',
-  '.json': 'application/json;charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-};
+const DIST_PATH = path.join(__dirname, 'dist');
 
-function serveDist(cb) {
-  const dist = path.join(__dirname, 'dist');
-  const server = http.createServer((req, res) => {
-    const uri = decodeURIComponent(req.url).split('?')[0];
-    let filePath = path.join(dist, uri === '/' ? 'index.html' : uri);
-    fs.readFile(filePath, (err, data) => {
-      if (err) { res.writeHead(404); res.end('404'); return; }
-      res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
-      res.end(data);
-    });
-  });
-  server.listen(0, '127.0.0.1', () => cb(server));
-}
-
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000, height: 700,
     minWidth: 800, minHeight: 600,
@@ -51,19 +25,7 @@ function createWindow() {
     icon: path.join(__dirname, 'public/icon.svg')
   });
 
-  if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:3000').catch(() => {
-      serveDist((server) => {
-        staticServer = server;
-        mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
-      });
-    });
-  } else {
-    serveDist((server) => {
-      staticServer = server;
-      mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
-    });
-  }
+  mainWindow.loadFile(path.join(DIST_PATH, 'index.html'));
 
   mainWindow.on('ready-to-show', () => mainWindow.show());
 
@@ -282,9 +244,9 @@ ipcMain.handle('stop-speech-recognition', async () => {
   return { success: true };
 });
 
-function showWindow() {
+async function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
-    createWindow();
+    await createWindow();
   } else {
     mainWindow.show();
     mainWindow.focus();
@@ -292,6 +254,7 @@ function showWindow() {
 }
 
 app.whenReady().then(() => {
+  session.defaultSession.clearCache().catch(() => {});
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
     if (permission === 'media') { callback(true); } else { callback(false); }
   });
@@ -346,6 +309,5 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
-  if (staticServer) { staticServer.close(); staticServer = null; }
 });
 app.on('window-all-closed', () => {});

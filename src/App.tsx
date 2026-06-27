@@ -169,6 +169,7 @@ export default function App() {
               isSpeaking={speech.isSpeaking} isPaused={speech.isPaused}
               showAiWarning={ai.showAiWarning} showLangDropdown={ai.showLangDropdown}
               targetLang={ai.targetLang} rate={speech.rate}
+              readingCharIndex={speech.readingCharIndex} readingCharLength={speech.readingCharLength}
               onTextChange={setText} onClipboard={handleClipboard}
               onTextUpload={handleTextUpload} onImageUpload={handleImageUpload}
               onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}

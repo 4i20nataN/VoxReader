@@ -13,7 +13,7 @@ export function Header({ isRecording, isSpeaking, activeVoiceName, wordCount, fo
   return (
     <header className="h-16 md:h-20 flex items-center justify-between px-4 lg:px-8 bg-[var(--bg-header)] border-b border-[var(--border-color)] shrink-0 transition-colors duration-300">
       <div className="flex items-center gap-4">
-        <h1 className="text-lg md:text-xl font-semibold tracking-tight text-[var(--text-main)]">Leitor Inteligente</h1>
+        <h1 className="text-lg md:text-xl font-semibold tracking-tight text-[var(--text-main)]">🎙️ Vox Reader</h1>
         <div className={cn("hidden lg:flex items-center gap-2 px-3 py-1 rounded-full border", isRecording || isSpeaking ? "bg-[var(--accent-transparent)] border-[var(--accent-border)]" : "bg-emerald-500/10 border-emerald-500/20")}>
           <div className={cn("w-2 h-2 rounded-full", isRecording || isSpeaking ? "bg-[var(--accent-hover)] animate-pulse" : "bg-emerald-500")}></div>
           <span className={cn("text-[10px] uppercase font-bold tracking-widest", isRecording || isSpeaking ? "text-[var(--accent-hover)]" : "text-emerald-500")}>
