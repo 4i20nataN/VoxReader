@@ -63,40 +63,21 @@ function findWordBounds(text: string, index: number): [number, number] {
 function findNearestWordBoundary(text: string, index: number): number {
   if (index <= 0) return 0;
   if (index >= text.length) return text.length;
-  
-  // Check if we're at a word boundary (space, newline, tab)
-  const charBefore = text[index - 1];
-  const charAt = text[index];
-  const isBoundary = charBefore === ' ' || charBefore === '\n' || charBefore === '\t' ||
-                     charAt === ' ' || charAt === '\n' || charAt === '\t';
-  
-  if (isBoundary) return index;
-  
-  // Find nearest word boundary (start of word or end of word)
+
+  const isWordChar = (c: string) => c !== ' ' && c !== '\n' && c !== '\t';
+
+  if (!isWordChar(text[index]) || (index > 0 && !isWordChar(text[index - 1]))) return index;
+
   let left = index;
+  while (left > 0 && isWordChar(text[left - 1])) left--;
+
   let right = index;
-  
-  // Search left for word boundary
-  while (left > 0) {
-    const c = text[left - 1];
-    if (c === ' ' || c === '\n' || c === '\t') break;
-    left--;
-  }
-  
-  // Search right for word boundary
-  while (right < text.length) {
-    const c = text[right];
-    if (c === ' ' || c === '\n' || c === '\t') break;
-    right++;
-  }
-  
-  // Return the closest boundary
-  const distLeft = index - left;
-  const distRight = right - index;
-  return distLeft <= distRight ? left : right;
+  while (right < text.length && isWordChar(text[right])) right++;
+
+  return (index - left) <= (right - index) ? left : right;
 }
 
-function HighlightedText({ text, highlightStart, highlightEnd }: { text: string; highlightStart: number; highlightEnd: number }) {
+function HighlightedText({ text, highlightStart, highlightEnd, markerIndex }: { text: string; highlightStart: number; highlightEnd: number; markerIndex: number | null }) {
   const lines = text.split('\n');
   let charOffset = 0;
   return (
@@ -105,16 +86,26 @@ function HighlightedText({ text, highlightStart, highlightEnd }: { text: string;
         const lineStart = charOffset;
         const lineEnd = charOffset + line.length;
         const segments: React.ReactNode[] = [];
+        const hasMarkerOnThisLine = markerIndex !== null && markerIndex >= lineStart && markerIndex < lineEnd;
         let i = lineStart;
         while (i <= lineEnd) {
-          if (i >= highlightStart && i < highlightEnd) {
+          if (hasMarkerOnThisLine && i === markerIndex) {
+            segments.push(
+              <span key={`m${i}`} className="inline-flex items-center">
+                <span className="w-2.5 h-2.5 bg-red-500 rounded-full inline-block mr-0.5 shrink-0" />
+                {text[i]}
+              </span>
+            );
+            i++;
+          } else if (i >= highlightStart && i < highlightEnd) {
             segments.push(
               <span key={`h${i}`} className="bg-cyan-400/15 rounded-sm px-px -mx-px">{text.slice(i, highlightEnd)}</span>
             );
             i = highlightEnd;
           } else if (i < lineEnd) {
-            const nextHighlight = highlightStart > i ? Math.min(highlightStart, lineEnd) : lineEnd;
-            const chunk = text.slice(i, nextHighlight);
+            const nextMarker = hasMarkerOnThisLine ? Math.min(markerIndex!, highlightStart > i ? Math.min(highlightStart, lineEnd) : lineEnd) : (highlightStart > i ? Math.min(highlightStart, lineEnd) : lineEnd);
+            const nextStop = hasMarkerOnThisLine && markerIndex! > i && markerIndex! < nextMarker ? markerIndex! : nextMarker;
+            const chunk = text.slice(i, nextStop);
             const chars: React.ReactNode[] = [];
             for (let c = 0; c < chunk.length; c++) {
               const ch = chunk[c];
@@ -122,7 +113,7 @@ function HighlightedText({ text, highlightStart, highlightEnd }: { text: string;
               chars.push(cls ? <span key={`c${i + c}`} className={cls}>{ch}</span> : ch);
             }
             segments.push(<span key={`n${i}`}>{chars}</span>);
-            i = nextHighlight;
+            i = nextStop;
           } else { break; }
         }
         charOffset = lineEnd + 1;
@@ -166,9 +157,26 @@ export function EditorTab({
   });
   const [readingStartMarker, setReadingStartMarker] = useState<number | null>(null);
   const [useMarkerOnNextPlay, setUseMarkerOnNextPlay] = useState(false);
+  const resetScrollRef = useRef(false);
 
   useEffect(() => {
     const ta = textareaRef.current;
+    if (resetScrollRef.current) {
+      resetScrollRef.current = false;
+      setReadingStartMarker(null);
+      setUseMarkerOnNextPlay(false);
+      setLocalText(text);
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.scrollTop = 0;
+          textareaRef.current.scrollLeft = 0;
+          textareaRef.current.selectionStart = 0;
+          textareaRef.current.selectionEnd = 0;
+          syncScroll();
+        }
+      });
+      return;
+    }
     if (!ta) { setLocalText(text); return; }
     const prevScrollTop = ta.scrollTop;
     const prevScrollLeft = ta.scrollLeft;
@@ -176,7 +184,7 @@ export function EditorTab({
     requestAnimationFrame(() => {
       if (ta) { ta.scrollTop = prevScrollTop; ta.scrollLeft = prevScrollLeft; }
     });
-  }, [text]);
+  }, [text, syncScroll]);
   useEffect(() => { localStorage.setItem('editor_font_size', fontSize.toString()); }, [fontSize]);
   useEffect(() => { localStorage.setItem('editor_line_height', lineHeight.toString()); }, [lineHeight]);
   useEffect(() => { localStorage.setItem('editor_letter_spacing', letterSpacing.toString()); }, [letterSpacing]);
@@ -260,21 +268,25 @@ export function EditorTab({
     if (textFromCursor.trim()) onRead(textFromCursor);
   }, [localText, onRead]);
 
-  const handleCtrlClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    const ta = e.currentTarget;
-    const pos = ta.selectionStart;
-    const boundary = findNearestWordBoundary(localText, pos);
+  const handleTextClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      const ta = e.currentTarget;
+      const pos = ta.selectionStart;
+      const boundary = findNearestWordBoundary(localText, pos);
 
-    if (readingStartMarker !== null && boundary === readingStartMarker) {
+      if (readingStartMarker !== null && boundary === readingStartMarker) {
+        setReadingStartMarker(null);
+        setUseMarkerOnNextPlay(false);
+        return;
+      }
+
+      setReadingStartMarker(boundary);
+    } else if (readingStartMarker !== null && !isSpeaking) {
       setReadingStartMarker(null);
       setUseMarkerOnNextPlay(false);
-      return;
     }
-
-    setReadingStartMarker(boundary);
-  }, [localText, readingStartMarker]);
+  }, [localText, readingStartMarker, isSpeaking]);
 
   const editorTextStyle = useMemo(() => ({
     fontSize: `${fontSize}px`,
@@ -380,7 +392,8 @@ export function EditorTab({
             onChange={handleChange}
             onBlur={handleBlur}
             onScroll={syncScroll}
-            onClick={handleCtrlClick}
+            onClick={handleTextClick}
+            onPaste={() => { if (!isSpeaking) resetScrollRef.current = true; }}
             placeholder=""
             className="absolute inset-0 w-full h-full bg-transparent border-none p-4 md:p-6 leading-relaxed focus:outline-none resize-none"
             style={textareaStyle}
@@ -419,7 +432,7 @@ export function EditorTab({
       )}
 
       <div className="flex items-center justify-center gap-2 mt-3 mb-1 shrink-0 flex-wrap">
-        <button onClick={onClipboard} disabled={!textNotEmpty} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !textNotEmpty && "opacity-40 pointer-events-none")}>
+        <button onClick={() => { resetScrollRef.current = true; onClipboard(); }} disabled={!textNotEmpty} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95", !textNotEmpty && "opacity-40 pointer-events-none")}>
           <Clipboard size={14}/> COLAR
         </button>
         <label className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border bg-[var(--bg-panel)] hover:bg-[var(--accent-transparent)] text-[var(--text-main)] hover:text-[var(--accent-hover)] border-[var(--border-color)] hover:border-[var(--accent-border)] focus:outline-none active:scale-95 cursor-pointer">
