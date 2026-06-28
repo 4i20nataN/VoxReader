@@ -30,7 +30,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   const [speechPrivacyOk, setSpeechPrivacyOk] = useState<boolean | null>(null);
   interface SpeechPack {
     name: string; displayName: string; installed: boolean;
-    locale?: string; langName?: string;
+    locale?: string; langName?: string; type?: 'speech' | 'tts';
   }
   const [speechPacks, setSpeechPacks] = useState<SpeechPack[]>(() => {
     const saved = loadData('speech_packs_list');
@@ -342,7 +342,6 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     checkSpeechPrivacy();
     const isElectron = typeof (window as any).require === 'function' && navigator.userAgent.includes('Electron');
     if (isElectron) {
-      // Refresh pack list in background (UI already shows persisted list)
       checkSpeechPacks();
     }
   }, []);
@@ -354,7 +353,20 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     try {
       const { ipcRenderer } = (window as any).require('electron');
       const result = await ipcRenderer.invoke('check-speech-packs');
-      if (result.packs) setSpeechPacks(result.packs);
+      if (result.packs) {
+        setSpeechPacks(prev => {
+          const merged = [...prev];
+          for (const pack of result.packs) {
+            let idx = merged.findIndex(p => p.name === pack.name);
+            if (idx < 0 && pack.locale) {
+              idx = merged.findIndex(p => p.locale === pack.locale && p.type === pack.type);
+            }
+            if (idx >= 0) merged[idx] = { ...merged[idx], installed: pack.installed };
+            else merged.push(pack);
+          }
+          return merged;
+        });
+      }
       if (result.error) setSpeechPacksError(result.error);
     } catch { setSpeechPacksError('Erro ao verificar pacotes.'); }
     setCheckingPacks(false);
@@ -366,8 +378,21 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     try {
       const { ipcRenderer } = (window as any).require('electron');
       const result = await ipcRenderer.invoke('check-speech-packs-online');
-      if (result.packs) setSpeechPacks(result.packs);
-    } catch { setSpeechPacksError('Erro ao buscar lista online.'); }
+      if (result.packs) {
+        setSpeechPacks(prev => {
+          const merged = [...prev];
+          for (const pack of result.packs) {
+            let idx = merged.findIndex(p => p.name === pack.name);
+            if (idx < 0 && pack.locale) {
+              idx = merged.findIndex(p => p.locale === pack.locale && p.type === pack.type);
+            }
+            if (idx >= 0) merged[idx] = { ...merged[idx], ...pack };
+            else merged.push(pack);
+          }
+          return merged;
+        });
+      }
+    } catch { setSpeechPacksError('Erro ao buscar pacotes online.'); }
     setCheckingPacks(false);
   };
 
@@ -447,7 +472,8 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     handleRead, handlePause, handleStop, toggleRecording,
     micError, clearMicError,
     speechPacks, selectedPackName, installProgress, installingPack, checkingPacks, speechPacksError,
-    checkSpeechPacks, checkSpeechPacksOnline, installSpeechPack, removeSpeechPack, selectPack,
+    checkSpeechPacks, checkSpeechPacksOnline,
+    installSpeechPack, removeSpeechPack, selectPack,
     speechPrivacyOk, checkSpeechPrivacy, acceptSpeechPrivacy, deactivateSpeechPrivacy
   };
 }

@@ -42,44 +42,58 @@ function serveDist(cb) {
     });
   });
   server.listen(DIST_PORT, '127.0.0.1', () => cb(server));
-  server.on('error', () => {
+  server.on('error', (err1) => {
+    console.warn('serveDist port', DIST_PORT, 'failed:', err1.code, 'trying random port');
     server.listen(0, '127.0.0.1', () => cb(server));
+    server.on('error', (err2) => {
+      console.error('serveDist random port also failed:', err2.code);
+    });
   });
 }
 
 async function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1000, height: 700,
-    minWidth: 800, minHeight: 600,
-    show: false, frame: true, autoHideMenuBar: true,
-    backgroundColor: '#0a0a0f',
-    webPreferences: { nodeIntegration: true, contextIsolation: false },
-    icon: path.join(__dirname, 'public/icon.svg')
-  });
+  try {
+    mainWindow = new BrowserWindow({
+      width: 1000, height: 700,
+      minWidth: 800, minHeight: 600,
+      show: false, frame: true, autoHideMenuBar: true,
+      backgroundColor: '#0a0a0f',
+      webPreferences: { nodeIntegration: true, contextIsolation: false },
+      icon: path.join(__dirname, 'public/icon.svg')
+    });
 
-  if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:3000').catch(() => {
-      serveDist((server) => {
-        staticServer = server;
-        mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
-      });
+    const loadWithFallback = () => {
+      if (!app.isPackaged) {
+        mainWindow.loadURL('http://localhost:3000').catch(() => {
+          serveDist((server) => {
+            staticServer = server;
+            mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`).catch(() => {});
+          });
+        });
+      } else {
+        serveDist((server) => {
+          staticServer = server;
+          mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`).catch(() => {});
+        });
+      }
+    };
+
+    loadWithFallback();
+
+    mainWindow.on('ready-to-show', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
     });
-  } else {
-    serveDist((server) => {
-      staticServer = server;
-      mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
+
+    mainWindow.on('close', (event) => {
+      if (!app.isQuitting) {
+        event.preventDefault();
+        mainWindow.destroy();
+        mainWindow = null;
+      }
     });
+  } catch (err) {
+    console.error('Failed to create window:', err);
   }
-
-  mainWindow.on('ready-to-show', () => mainWindow.show());
-
-  mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
-      event.preventDefault();
-      mainWindow.destroy();
-      mainWindow = null;
-    }
-  });
 }
 
 // Start with Windows
@@ -87,49 +101,42 @@ ipcMain.on('set-auto-launch', (_, enable) => {
   app.setLoginItemSettings({ openAtLogin: enable, args: ['--hidden'] });
 });
 
-// List available Windows speech recognition packs via DISM
+// List installed Windows speech & TTS packs from Registry (no admin needed)
 ipcMain.handle('check-speech-packs', async () => {
-  const dismCmd = "Get-WindowsCapability -Online | Where-Object { $_.Name -like 'Language.Speech~~~*' } | ForEach-Object { Write-Output ($_.Name + '|' + $_.DisplayName + '|' + $_.State) }";
+  const psCmd = `$ProgressPreference='SilentlyContinue'; Get-ChildItem 'HKLM:\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices\\Tokens' -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue; if ($p) { $n = $_.PSChildName; $d = [string]$p.'(Default)'; $m = [regex]::Match($n, 'V\\d+_(\\w{4})_'); $loc = if ($m.Success) { $v = $m.Groups[1].Value; $v.Substring(0,2).ToLower() + '-' + $v.Substring(2).ToUpper() } else { '' }; Write-Output ('TTS|' + $n + '|' + $d + '|' + $loc) } }; Get-ChildItem 'HKLM:\\SOFTWARE\\Microsoft\\Speech_OneCore\\Recognizers\\Tokens' -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue; if ($p) { $n = $_.PSChildName; $d = [string]$p.'(Default)'; $lm = [regex]::Match($d, '([a-z]{2}-[A-Z]{2})'); $loc = if ($lm.Success) { $lm.Groups[1].Value } else { '' }; Write-Output ('SR|' + $n + '|' + $d + '|' + $loc) } }`;
 
-  const runPs = (cmd) => new Promise((resolve) => {
-    const buf = Buffer.from(cmd, 'ucs2');
-    const encoded = buf.toString('base64');
-    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
-      timeout: 60000, windowsHide: true
-    }, (error, stdout, stderr) => {
-      resolve({ error, stdout, stderr });
-    });
-  });
-
-  const fallbackCmd = "Get-WindowsCapability -Online -Name Language.Speech~~~* | ForEach-Object { Write-Output ($_.Name + '|' + $_.DisplayName + '|' + $_.State) }";
-
-  let result = await runPs(dismCmd);
-  if (result.error || !result.stdout.trim()) {
-    result = await runPs(fallbackCmd);
-  }
-
-  if ((result.error || !result.stdout.trim()) && result.stderr) {
-    return { error: 'DISM não disponível ou sem permissão. Execute como Administrador para listar pacotes de fala.' };
-  }
+  const buf = Buffer.from(psCmd, 'ucs2');
+  const encoded = buf.toString('base64');
 
   try {
-    const lines = (result.stdout || '').trim().split(/\r?\n/).filter(Boolean);
-    const list = lines.map(line => {
-      const [name, displayName, stateStr] = line.split('|');
-      const localeMatch = name && name.match(/~~~([a-z]{2}-[A-Z]{2})~/);
-      const locale = localeMatch ? localeMatch[1] : '';
-      const langName = locale ? new Intl.DisplayNames(['pt-BR'], { type: 'language' }).of(locale) : '';
+    const result = await new Promise((resolve) => {
+      execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+        timeout: 15000, windowsHide: true
+      }, (error, stdout) => {
+        resolve({ error, stdout: stdout || '' });
+      });
+    });
+
+    const packs = result.stdout.trim().split(/\r?\n/).filter(Boolean).map(line => {
+      const [registryType, , displayName, locale] = line.split('|');
+      const type = registryType === 'SR' ? 'speech' : 'tts';
+      let langName = locale;
+      try { langName = new Intl.DisplayNames(['pt-BR'], { type: 'language' }).of(locale) || locale; } catch {}
       return {
-        name: name || '',
-        displayName: displayName || locale || name || '',
+        name: type === 'tts'
+          ? `Language.TextToSpeech~~~${locale}~0.0.1.0`
+          : `Language.Speech~~~${locale}~0.0.1.0`,
+        displayName: displayName || locale,
         locale,
         langName: langName || locale,
-        installed: parseInt(stateStr, 10) === 4
+        installed: true,
+        type
       };
-    });
-    return { packs: list };
+    }).filter(p => p.locale);
+
+    return { packs };
   } catch {
-    return { error: 'Erro ao processar lista de pacotes de fala.' };
+    return { error: 'Erro ao ler pacotes de fala do Registro.' };
   }
 });
 
@@ -184,110 +191,187 @@ const SPEECH_LOCALES = [
   { locale: 'zh-TW', lang: 'Chinese (Traditional)' }, { locale: 'zu-ZA', lang: 'Zulu' },
 ];
 
-// Search all known speech locales (online curated list + DISM cross-reference)
+// Cache for online pack list (5 min TTL)
+let onlinePacksCache = null;
+let onlinePacksCacheTime = 0;
+const ONLINE_CACHE_TTL = 300000; // 5 min
+
+// Search all known speech/TTS locales (online curated list + Registry cross-reference)
 ipcMain.handle('check-speech-packs-online', async () => {
-  let installedLocales = new Set();
+  if (onlinePacksCache && Date.now() - onlinePacksCacheTime < ONLINE_CACHE_TTL) {
+    return onlinePacksCache;
+  }
+
+  let installedSpeech = new Set();
+  let installedTTS = new Set();
   try {
-    const cmd = "Get-WindowsCapability -Online -Name Language.Speech~~~* | ForEach-Object { $_.Name }";
+    const cmd = `$ProgressPreference='SilentlyContinue'; Get-ChildItem 'HKLM:\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices\\Tokens' -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue; if ($p) { $n = $_.PSChildName; $m = [regex]::Match($n, 'V\\d+_(\\w{4})_'); if ($m.Success) { $v = $m.Groups[1].Value; Write-Output ('TTS|' + $v.Substring(0,2).ToLower() + '-' + $v.Substring(2).ToUpper()) } } }; Get-ChildItem 'HKLM:\\SOFTWARE\\Microsoft\\Speech_OneCore\\Recognizers\\Tokens' -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue; if ($p) { $d = [string]$p.'(Default)'; $lm = [regex]::Match($d, '([a-z]{2}-[A-Z]{2})'); if ($lm.Success) { Write-Output ('SR|' + $lm.Groups[1].Value) } } }`;
     const buf = Buffer.from(cmd, 'ucs2');
     const encoded = buf.toString('base64');
     const result = await new Promise((resolve) => {
       execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
-        timeout: 30000, windowsHide: true
+        timeout: 15000, windowsHide: true
       }, (error, stdout) => {
         resolve({ error, stdout: stdout || '' });
       });
     });
     if (!result.error) {
       result.stdout.trim().split(/\r?\n/).filter(Boolean).forEach(line => {
-        const m = line.match(/~~~([a-z]{2}-[A-Z]{2})~/);
-        if (m) installedLocales.add(m[1]);
+        const parts = line.split('|');
+        if (parts.length === 2) {
+          if (parts[0] === 'TTS') installedTTS.add(parts[1]);
+          else if (parts[0] === 'SR') installedSpeech.add(parts[1]);
+        }
       });
     }
   } catch {}
 
-  const packs = SPEECH_LOCALES.map(({ locale, lang }) => ({
-    name: `Language.Speech~~~${locale}~9.0.1.0`,
-    displayName: lang,
-    locale,
-    langName: lang,
-    installed: installedLocales.has(locale)
-  }));
-  return { packs };
+  const packs = [];
+  for (const { locale, lang } of SPEECH_LOCALES) {
+    packs.push({
+      name: `Language.Speech~~~${locale}~0.0.1.0`,
+      displayName: lang,
+      locale,
+      langName: lang,
+      installed: installedSpeech.has(locale),
+      type: 'speech'
+    });
+    packs.push({
+      name: `Language.TextToSpeech~~~${locale}~0.0.1.0`,
+      displayName: lang,
+      locale,
+      langName: lang,
+      installed: installedTTS.has(locale),
+      type: 'tts'
+    });
+  }
+  onlinePacksCache = { packs };
+  onlinePacksCacheTime = Date.now();
+  return onlinePacksCache;
 });
 
-// Install a speech pack via DISM (triggers UAC) with progress polling
+// Invalidate cache when packs are installed/removed
+function invalidateOnlineCache() {
+  onlinePacksCache = null;
+  onlinePacksCacheTime = 0;
+}
+
+// Validate pack name format before install/remove
+function isValidPackName(name) {
+  return /^Language\.(Speech|TextToSpeech)~~~[a-z]{2}-[A-Z]{2}~[\d.]+$/.test(name);
+}
+
+// Shared polling: check DISM state until installed (4) or timeout (120 attempts = 6 min)
+function pollCapabilityState(packName, win, desiredState, label) {
+  return new Promise((resolve) => {
+    const isDesiredState = desiredState === 4
+      ? (s) => s === 4
+      : (s) => s === 0 || s === 1; // NotPresent or resolved for removal
+    let attempts = 0;
+    const poll = () => {
+      const checkCmd = `$s = (Get-WindowsCapability -Online -Name "${packName}").State; if ($s -eq ${desiredState}) { 'OK' } elseif ($s -eq 0) { 'NO' } else { 'FAIL:' + $s }`;
+      const checkBuf = Buffer.from(checkCmd, 'ucs2');
+      const checkEncoded = checkBuf.toString('base64');
+      execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', checkEncoded], {
+        timeout: 15000, windowsHide: true
+      }, (err, out) => {
+        const result = (out || '').trim();
+        if (result === 'OK') {
+          resolve({ success: true });
+        } else if (result.startsWith('FAIL:')) {
+          resolve({ error: `${label} falhou (código ${result.slice(5)}).` });
+        } else if (attempts < 120) {
+          attempts++;
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('install-progress', { packName, progress: Math.min(Math.round(attempts / 120 * 100), 100) });
+          }
+          setTimeout(poll, 3000);
+        } else {
+          resolve({ error: `Tempo limite excedido (6 min) para ${label}.` });
+        }
+      });
+    };
+    setTimeout(poll, 2000);
+  });
+}
+
+// Install a speech/TTS pack via DISM (triggers UAC) with real polling
 ipcMain.handle('install-speech-pack', async (event, packName) => {
+  if (!isValidPackName(packName)) {
+    return { error: 'Nome de pacote inválido.' };
+  }
+
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('install-progress', { packName, progress: 1 });
+  }
+
+  // Fire-and-forget elevated install (no -Wait so polling starts immediately)
   const scriptPath = path.join(os.tmpdir(), `install-speech-${Date.now()}.ps1`);
-  const scriptContent = `Add-WindowsCapability -Online -Name "${packName}"`;
-  fs.writeFileSync(scriptPath, scriptContent, 'utf8');
+  fs.writeFileSync(scriptPath, `Add-WindowsCapability -Online -Name "${packName}"`, 'utf8');
+  const launchCmd = `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"'`;
+  const buf = Buffer.from(launchCmd, 'ucs2');
+  const encoded = buf.toString('base64');
+
+  execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+    timeout: 10000, windowsHide: true
+  }, (launchError) => {
+    if (launchError) {
+      try { fs.unlinkSync(scriptPath); } catch {}
+    }
+  });
+
+  // Start polling while install runs in background
+  const result = await pollCapabilityState(packName, win, 4, 'Instalação');
+  try { fs.unlinkSync(scriptPath); } catch {}
+  invalidateOnlineCache();
+  return result;
+});
+
+// Remove a speech/TTS pack via DISM (triggers UAC) with polling
+ipcMain.handle('remove-speech-pack', async (event, packName) => {
+  if (!isValidPackName(packName)) {
+    return { error: 'Nome de pacote inválido.' };
+  }
 
   const win = BrowserWindow.getAllWindows()[0];
 
-  const launchCmd = `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"' -Wait`;
+  const scriptPath = path.join(os.tmpdir(), `remove-speech-${Date.now()}.ps1`);
+  fs.writeFileSync(scriptPath, `Remove-WindowsCapability -Online -Name "${packName}"`, 'utf8');
+  const launchCmd = `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"'`;
   const buf = Buffer.from(launchCmd, 'ucs2');
   const encoded = buf.toString('base64');
 
-  return new Promise((resolve) => {
-    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
-      timeout: 600000, windowsHide: true
-    }, (launchError) => {
-      if (launchError) {
-        try { fs.unlinkSync(scriptPath); } catch {}
-        resolve({ error: 'Erro ao iniciar instalação. Verifique se o Windows é compatível.' });
-        return;
-      }
-      // Poll for completion
-      let attempts = 0;
-      const poll = () => {
-        const checkCmd = `$s = (Get-WindowsCapability -Online -Name "${packName}").State; if ($s -eq 4) { 'OK' } elseif ($s -eq 0) { 'NO' } else { 'FAIL:' + $s }`;
-        const checkBuf = Buffer.from(checkCmd, 'ucs2');
-        const checkEncoded = checkBuf.toString('base64');
-        execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', checkEncoded], {
-          timeout: 15000, windowsHide: true
-        }, (err, out) => {
-          const result = (out || '').trim();
-          if (result === 'OK') {
-            try { fs.unlinkSync(scriptPath); } catch {}
-            resolve({ success: true });
-          } else if (result.startsWith('FAIL:')) {
-            try { fs.unlinkSync(scriptPath); } catch {}
-            resolve({ error: 'Falha na instalação. Tente executar o instalador como Administrador manualmente.' });
-          } else if (attempts < 120) {
-            attempts++;
-            if (win && !win.isDestroyed()) {
-              win.webContents.send('install-progress', { packName, progress: Math.min(attempts, 95) });
-            }
-            setTimeout(poll, 3000);
-          } else {
-            try { fs.unlinkSync(scriptPath); } catch {}
-            resolve({ error: 'Tempo limite excedido (6 min). Verifique sua conexão e tente novamente.' });
-          }
-        });
-      };
-      setTimeout(poll, 3000);
-    });
+  execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+    timeout: 10000, windowsHide: true
+  }, (launchError) => {
+    if (launchError) {
+      try { fs.unlinkSync(scriptPath); } catch {}
+    }
   });
+
+  const result = await pollCapabilityState(packName, win, 0, 'Remoção');
+  try { fs.unlinkSync(scriptPath); } catch {}
+  invalidateOnlineCache();
+  return result;
 });
 
-// Remove a speech pack via DISM (triggers UAC)
-ipcMain.handle('remove-speech-pack', async (event, packName) => {
-  const scriptPath = path.join(os.tmpdir(), `remove-speech-${Date.now()}.ps1`);
-  const scriptContent = `Remove-WindowsCapability -Online -Name "${packName}"`;
-  fs.writeFileSync(scriptPath, scriptContent, 'utf8');
-  const launchCmd = `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"' -Wait`;
-  const buf = Buffer.from(launchCmd, 'ucs2');
+// Restart the app as Administrator
+ipcMain.handle('request-admin', async () => {
+  const appPath = process.execPath;
+  const projectDir = __dirname;
+  // Pass absolute project path + set working directory so the elevated process
+  // finds package.json even when spawned from System32 (default for -Verb RunAs)
+  const ps = `Start-Process -FilePath "${appPath}" -ArgumentList '"${projectDir}"' -Verb RunAs -WorkingDirectory "${projectDir}"`;
+  const buf = Buffer.from(ps, 'ucs2');
   const encoded = buf.toString('base64');
   return new Promise((resolve) => {
     execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
-      timeout: 600000, windowsHide: true
-    }, (launchError) => {
-      try { fs.unlinkSync(scriptPath); } catch {}
-      if (launchError) {
-        resolve({ error: 'Erro ao desinstalar pacote.' });
-      } else {
-        resolve({ success: true });
-      }
+      timeout: 10000, windowsHide: true
+    }, () => {
+      app.isQuitting = true;
+      app.quit();
+      resolve({ success: true });
     });
   });
 });
@@ -416,7 +500,11 @@ ipcMain.on('file:load', (event, key) => {
 
 async function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
-    await createWindow();
+    try {
+      await createWindow();
+    } catch (err) {
+      console.error('showWindow: createWindow failed', err);
+    }
   } else {
     mainWindow.show();
     mainWindow.focus();
@@ -474,6 +562,9 @@ app.whenReady().then(() => {
   globalShortcut.register('CommandOrControl+Shift+Space', showWindow);
 
   app.on('activate', showWindow);
+
+  // Create window on startup (not just tray)
+  showWindow();
 });
 
 app.on('will-quit', () => {
@@ -481,3 +572,9 @@ app.on('will-quit', () => {
   if (staticServer) { staticServer.close(); staticServer = null; }
 });
 app.on('window-all-closed', () => {});
+// Prevent app from quitting when the spawning terminal is closed — stay in tray
+app.on('before-quit', (event) => {
+  if (tray && !app.isQuitting) {
+    event.preventDefault();
+  }
+});

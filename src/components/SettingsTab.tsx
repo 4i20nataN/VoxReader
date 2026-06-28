@@ -5,7 +5,7 @@ import { ThemeBg, ThemeAccent, backgroundPalettes, accentPalettes } from '../the
 
 interface SpeechPack {
   name: string; displayName: string; installed: boolean;
-  locale?: string; langName?: string;
+  locale?: string; langName?: string; type?: 'speech' | 'tts';
 }
 
 interface SettingsTabProps {
@@ -89,34 +89,119 @@ export function SettingsTab(props: SettingsTabProps) {
     onSetSelectedAudioInput, onSetSelectedAudioOutput, onSetReadSpecialChars,
     onSetAiProvider, onSaveConfigs,
     onSetAiModel, onSetAiApiKey, onSetAiLocalUrl,
-    onCheckSpeechPacks, onCheckSpeechPacksOnline, onInstallSpeechPack, onRemoveSpeechPack, onSelectPack
+    onCheckSpeechPacks, onCheckSpeechPacksOnline,
+    onInstallSpeechPack, onRemoveSpeechPack, onSelectPack
   } = props;
 
   const [packSearch, setPackSearch] = useState('');
-  const installedPacks = speechPacks.filter(p => p.installed);
+  const [packViewTab, setPackViewTab] = useState<'installed' | 'list'>('installed');
+  const [packTypeFilter, setPackTypeFilter] = useState<'all' | 'speech' | 'tts'>('all');
+  const [selectedForDownload, setSelectedForDownload] = useState<string[]>([]);
+  const [prevChecking, setPrevChecking] = useState(checkingPacks);
+  const onlineSearchRef = useRef(false);
+
+  // Auto-switch to Lista tab after online search completes
+  useEffect(() => {
+    if (prevChecking && !checkingPacks && onlineSearchRef.current) {
+      setPackViewTab('list');
+      onlineSearchRef.current = false;
+    }
+    setPrevChecking(checkingPacks);
+  }, [checkingPacks]);
+
+  const toggleDownloadSelection = (name: string) => {
+    setSelectedForDownload(prev =>
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    );
+  };
+
+  const handleBatchInstall = () => {
+    for (const name of selectedForDownload) {
+      onInstallSpeechPack(name);
+    }
+    setSelectedForDownload([]);
+  };
+
+  const allInstalledPacks = speechPacks.filter(p => p.installed);
+  const installedPacks = packTypeFilter === 'all'
+    ? allInstalledPacks
+    : allInstalledPacks.filter(p => p.type === packTypeFilter);
   const availablePacks = speechPacks.filter(p => !p.installed);
 
-  const renderPack = (pack: SpeechPack) => {
+  // Filter voices based on selected TTS pack locale
+  const selectedPack = speechPacks.find(p => p.name === selectedPackName);
+  const ttsLocale = selectedPack?.type === 'tts' && selectedPack.installed ? selectedPack.locale : null;
+  const displayVoices = ttsLocale
+    ? voices.filter(v => v.lang.startsWith(ttsLocale.split('-')[0]))
+    : voices;
+
+  const renderPack = (pack: SpeechPack, isListView?: boolean) => {
     const isInstalled = pack.installed;
     const isSelected = selectedPackName === pack.name;
     const isDownloading = installingPack === pack.name;
+    const isChecked = selectedForDownload.includes(pack.name);
+
+    if (isListView) {
+      return (
+        <div key={pack.name} className="flex items-center justify-between py-3 px-3 rounded-lg mb-1.5 transition-all border border-transparent hover:bg-[var(--bg-input)]">
+          <div className="flex items-center gap-3 min-w-0 flex-1" onClick={() => toggleDownloadSelection(pack.name)}>
+            <div className={cn(
+              "w-5 h-5 rounded shrink-0 flex items-center justify-center transition-all border-2",
+              isChecked
+                ? "bg-[var(--accent-hover)] border-[var(--accent-hover)]"
+                : "border-[var(--border-color)] hover:border-[var(--accent-color)]"
+            )}>
+              {isChecked && <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm truncate text-[var(--text-main)]">{pack.langName || pack.displayName || pack.name}</span>
+                {pack.locale && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-input)] text-[var(--text-darker)] font-mono uppercase">{pack.locale}</span>}
+                {pack.type && (
+                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", pack.type === 'tts' ? "bg-purple-500/10 text-purple-500" : "bg-blue-500/10 text-blue-500")}>
+                    {pack.type === 'tts' ? 'Voz' : 'Reconhecimento'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isDownloading && installProgress > 0 && (
+              <div className="w-16 h-1.5 bg-[var(--bg-input)] rounded-full overflow-hidden">
+                <div className="h-full bg-[var(--accent-hover)] rounded-full transition-all" style={{ width: `${installProgress}%` }}></div>
+              </div>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onInstallSpeechPack(pack.name); }}
+              disabled={isDownloading}
+              className="text-xs bg-[var(--accent-color)] text-white px-3 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-60 transition-all active:scale-90 flex items-center gap-1"
+            >
+              {isDownloading ? (
+                <>{installProgress > 0 ? `${installProgress}%` : '...'}</>
+              ) : 'Baixar'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Baixados tab: full controls with radio + Usar/Desinstalar
     return (
       <div key={pack.name} className={cn(
-        "flex items-center justify-between py-3 px-3 rounded-lg mb-1.5 transition-all border",
+        "flex items-center justify-between py-3 px-3 rounded-lg mb-1.5 transition-all border cursor-pointer",
         isSelected
           ? "bg-[var(--accent-transparent)] border-[var(--accent-border)] shadow-sm"
-          : isInstalled
-            ? "border-[var(--border-color)] hover:bg-[var(--bg-input)]"
-            : "border-transparent hover:bg-[var(--bg-input)]"
+          : "border-[var(--border-color)] hover:bg-[var(--bg-input)]"
       )}>
-        <div className="flex items-center gap-3 min-w-0">
-          {isSelected ? (
-            <div className="w-5 h-5 rounded-full bg-[var(--accent-hover)] flex items-center justify-center shrink-0">
-              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-            </div>
-          ) : (
-            <div className="w-5 h-5 rounded-full border-2 border-[var(--border-color)] shrink-0" />
-          )}
+        <div className="flex items-center gap-3 min-w-0 flex-1" onClick={() => onSelectPack(pack.name)}>
+          <div className={cn(
+            "w-5 h-5 rounded-full shrink-0 flex items-center justify-center transition-all",
+            isSelected
+              ? "bg-[var(--accent-hover)]"
+              : "border-2 border-[var(--border-color)] hover:border-[var(--accent-color)]"
+          )}>
+            {isSelected && <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>}
+          </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={cn("text-sm truncate", isSelected ? "text-[var(--accent-hover)] font-semibold" : "text-[var(--text-main)]")}>
@@ -125,12 +210,15 @@ export function SettingsTab(props: SettingsTabProps) {
               {pack.locale && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-input)] text-[var(--text-darker)] font-mono uppercase">{pack.locale}</span>
               )}
+              {pack.type && (
+                <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", pack.type === 'tts' ? "bg-purple-500/10 text-purple-500" : "bg-blue-500/10 text-blue-500")}>
+                  {pack.type === 'tts' ? 'Voz' : 'Reconhecimento'}
+                </span>
+              )}
             </div>
-            {isInstalled && (
-              <span className={cn("text-[10px] font-medium", isSelected ? "text-[var(--accent-hover)]" : "text-emerald-500")}>
-                {isSelected ? '✓ Em uso' : 'Instalado'}
-              </span>
-            )}
+            <span className={cn("text-[10px] font-medium", isSelected ? "text-[var(--accent-hover)]" : "text-emerald-500")}>
+              {isSelected ? '✓ Em uso' : 'Instalado'}
+            </span>
           </div>
         </div>
 
@@ -140,38 +228,26 @@ export function SettingsTab(props: SettingsTabProps) {
               <div className="h-full bg-[var(--accent-hover)] rounded-full transition-all" style={{ width: `${installProgress}%` }}></div>
             </div>
           )}
-          {isInstalled ? (
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => onSelectPack(pack.name)}
-                disabled={isSelected}
-                className={cn(
-                  "text-xs px-3 py-1.5 rounded-lg font-medium transition-all active:scale-90 min-w-[4.5rem]",
-                  isSelected
-                    ? "bg-emerald-500 text-white cursor-default shadow-sm"
-                    : "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)]"
-                )}
-              >
-                {isSelected ? 'Em uso' : 'Usar'}
-              </button>
-              <button
-                onClick={() => onRemoveSpeechPack(pack.name)}
-                className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all active:scale-90 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
-              >
-                Desinstalar
-              </button>
-            </div>
-          ) : (
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => onInstallSpeechPack(pack.name)}
-              disabled={isDownloading}
-              className="text-xs bg-[var(--accent-color)] text-white px-3 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-60 transition-all active:scale-90 flex items-center gap-1"
+              onClick={() => onSelectPack(pack.name)}
+              disabled={isSelected}
+              className={cn(
+                "text-xs px-3 py-1.5 rounded-lg font-medium transition-all active:scale-90 min-w-[4.5rem]",
+                isSelected
+                  ? "bg-emerald-500 text-white cursor-default shadow-sm"
+                  : "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)]"
+              )}
             >
-              {isDownloading ? (
-                <>{installProgress > 0 ? `${installProgress}%` : '...'}</>
-              ) : 'Baixar'}
+              {isSelected ? 'Em uso' : 'Usar'}
             </button>
-          )}
+            <button
+              onClick={() => onRemoveSpeechPack(pack.name)}
+              className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all active:scale-90 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
+            >
+              Desinstalar
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -231,23 +307,59 @@ export function SettingsTab(props: SettingsTabProps) {
                   <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
                   Pacotes de Fala
                 </span>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={onCheckSpeechPacks}
+                    disabled={checkingPacks}
+                    className="text-xs bg-[var(--accent-color)] text-white px-3 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] active:scale-90 transition-all flex items-center gap-1.5 font-medium disabled:opacity-60"
+                  >
+                    <svg className={cn("w-3.5 h-3.5", checkingPacks && "animate-spin")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Local
+                  </button>
+                  <button
+                    onClick={() => { onlineSearchRef.current = true; onCheckSpeechPacksOnline(); }}
+                    className="text-xs bg-emerald-500 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600 active:scale-90 transition-all flex items-center gap-1.5 font-medium shadow-sm"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+                    Online
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabs: Baixados | Lista */}
+              <div className="flex gap-1 mb-3">
                 <button
-                  onClick={onCheckSpeechPacks}
-                  disabled={checkingPacks}
-                  className="text-xs bg-[var(--accent-color)] text-white px-3.5 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] active:scale-90 transition-all flex items-center gap-1.5 font-medium disabled:opacity-60"
+                  onClick={() => setPackViewTab('installed')}
+                  className={cn(
+                    "text-xs px-3 py-1.5 rounded-lg font-medium transition-all",
+                    packViewTab === 'installed'
+                      ? "bg-[var(--accent-color)] text-white"
+                      : "bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                  )}
                 >
-                  <svg className={cn("w-3.5 h-3.5", checkingPacks && "animate-spin")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                  {checkingPacks ? 'Buscando...' : 'Buscar'}
+                  Baixados ({allInstalledPacks.length})
                 </button>
                 <button
-                  onClick={onCheckSpeechPacksOnline}
-                  disabled={checkingPacks}
-                  className="text-xs bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-main)] px-3.5 py-1.5 rounded-lg hover:bg-[var(--bg-input)] active:scale-90 transition-all flex items-center gap-1.5 font-medium disabled:opacity-60"
+                  onClick={() => setPackViewTab('list')}
+                  className={cn(
+                    "text-xs px-3 py-1.5 rounded-lg font-medium transition-all",
+                    packViewTab === 'list'
+                      ? "bg-[var(--accent-color)] text-white"
+                      : "bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                  )}
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
-                  Online
+                  Lista ({availablePacks.length})
                 </button>
               </div>
+
+              {/* Type filter chips inside Baixados */}
+              {packViewTab === 'installed' && allInstalledPacks.length > 0 && (
+                <div className="flex gap-1.5 mb-3">
+                  <button onClick={() => setPackTypeFilter('all')} className={cn("text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all", packTypeFilter === 'all' ? "bg-[var(--accent-color)] text-white" : "bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)]")}>Todos</button>
+                  <button onClick={() => setPackTypeFilter('speech')} className={cn("text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all", packTypeFilter === 'speech' ? "bg-blue-500 text-white" : "bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)]")}>Reconhecimento</button>
+                  <button onClick={() => setPackTypeFilter('tts')} className={cn("text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all", packTypeFilter === 'tts' ? "bg-purple-500 text-white" : "bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)]")}>Voz</button>
+                </div>
+              )}
 
               <div className="relative mb-3">
                 <input
@@ -265,49 +377,50 @@ export function SettingsTab(props: SettingsTabProps) {
                 </div>
               )}
 
-              {checkingPacks && speechPacks.length === 0 && (
-                <p className="text-xs text-[var(--text-darker)] text-center py-6">Buscando pacotes disponíveis...</p>
-              )}
+              {/* Scrollable pack list */}
+              <div className="max-h-64 overflow-y-auto space-y-0.5 pr-1">
+                {checkingPacks && speechPacks.length === 0 && (
+                  <p className="text-xs text-[var(--text-darker)] text-center py-6">Buscando pacotes disponíveis...</p>
+                )}
 
-              {!checkingPacks && speechPacks.length === 0 && !speechPacksError && (
-                <p className="text-xs text-[var(--text-darker)] text-center py-6">Clique em "Buscar" para listar os pacotes de fala disponíveis para seu Windows.</p>
-              )}
+                {!checkingPacks && speechPacks.length === 0 && !speechPacksError && (
+                  <p className="text-xs text-[var(--text-darker)] text-center py-6">Clique em "Local" para listar os pacotes de fala disponíveis para seu Windows.</p>
+                )}
 
-              {installedPacks.length > 0 && (() => {
-                const filtered = installedPacks.filter(p =>
-                  !packSearch || p.langName?.toLowerCase().includes(packSearch.toLowerCase()) ||
-                  p.locale?.toLowerCase().includes(packSearch.toLowerCase()) ||
-                  p.displayName?.toLowerCase().includes(packSearch.toLowerCase())
-                );
-                if (filtered.length === 0) return null;
-                return (
-                  <div className="mb-3">
-                    <p className="text-[10px] font-bold text-[var(--text-darker)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                      Instalados ({filtered.length})
-                    </p>
-                    {filtered.map(pack => renderPack(pack))}
-                  </div>
-                );
-              })()}
+                {packViewTab === 'installed' && installedPacks.length > 0 && (() => {
+                  const filtered = installedPacks.filter(p =>
+                    !packSearch || p.langName?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                    p.locale?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                    p.displayName?.toLowerCase().includes(packSearch.toLowerCase())
+                  );
+                  if (filtered.length === 0) return <p className="text-xs text-[var(--text-darker)] text-center py-4">Nenhum pacote instalado encontrado.</p>;
+                  return filtered.map(pack => renderPack(pack, false));
+                })()}
 
-              {availablePacks.length > 0 && (() => {
-                const filtered = availablePacks.filter(p =>
-                  !packSearch || p.langName?.toLowerCase().includes(packSearch.toLowerCase()) ||
-                  p.locale?.toLowerCase().includes(packSearch.toLowerCase()) ||
-                  p.displayName?.toLowerCase().includes(packSearch.toLowerCase())
-                );
-                if (filtered.length === 0) return null;
-                return (
-                  <div>
-                    <p className="text-[10px] font-bold text-[var(--text-darker)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                      Disponíveis ({filtered.length})
-                    </p>
-                    {filtered.map(pack => renderPack(pack))}
-                  </div>
-                );
-              })()}
+                {packViewTab === 'list' && availablePacks.length > 0 && (() => {
+                  const filtered = availablePacks.filter(p =>
+                    !packSearch || p.langName?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                    p.locale?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                    p.displayName?.toLowerCase().includes(packSearch.toLowerCase())
+                  );
+                  if (filtered.length === 0) return <p className="text-xs text-[var(--text-darker)] text-center py-4">Nenhum pacote disponível encontrado.</p>;
+                  return (<>
+                    {selectedForDownload.length > 0 && (
+                      <div className="flex items-center justify-end gap-2 px-1 pb-2 pt-1 border-b border-[var(--border-color)] mb-2">
+                        <button onClick={() => setSelectedForDownload([])} className="text-[10px] text-[var(--text-darker)] hover:text-[var(--text-main)] transition-colors">Limpar seleção</button>
+                        <button onClick={handleBatchInstall} disabled={installingPack !== null} className="text-xs bg-[var(--accent-color)] text-white px-3 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-60 transition-all font-medium flex items-center gap-1">
+                          Baixar selecionados ({selectedForDownload.length})
+                        </button>
+                      </div>
+                    )}
+                    {filtered.map(pack => renderPack(pack, true))}
+                  </>);
+                })()}
+
+                {packViewTab === 'list' && availablePacks.length === 0 && !checkingPacks && (
+                  <p className="text-xs text-[var(--text-darker)] text-center py-6">Clique em "Online" para buscar pacotes disponíveis.</p>
+                )}
+              </div>
 
               {installingPack && (() => {
                 const pack = speechPacks.find(p => p.name === installingPack);
@@ -324,6 +437,7 @@ export function SettingsTab(props: SettingsTabProps) {
                   </div>
                 );
               })()}
+
             </div>
 
             <p className="text-xs text-[var(--text-darker)] leading-relaxed">Baixe o pacote de fala do seu idioma e clique em "Usar" para ativar a transcrição por voz offline.</p>
@@ -376,24 +490,30 @@ export function SettingsTab(props: SettingsTabProps) {
           {/* Voice Engine */}
           <div className="space-y-4">
             <h3 className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] pb-2 mb-4">Áudio Engine</h3>
-            <label className="block text-sm font-medium text-[var(--text-light)]" htmlFor="voice-select">Motor de Voz Instalado (Offline)</label>
+            <label className="block text-sm font-medium text-[var(--text-light)]" htmlFor="voice-select">
+              Motor de Voz Instalado (Offline)
+              {ttsLocale && <span className="text-xs text-[var(--text-darker)] font-normal ml-2">— Vozes do pacote: {selectedPack?.langName || ttsLocale}</span>}
+            </label>
             <div className="relative">
               <select id="voice-select"
                 value={selectedVoiceURI}
                 onChange={(e) => onSetSelectedVoiceURI(e.target.value)}
                 className="w-full appearance-none bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-main)] py-3 px-4 rounded-lg focus:outline-none focus:border-[var(--accent-hover)] focus:ring-1 focus:ring-[var(--accent-hover)] transition-colors shadow-sm"
               >
-                {voices.map((voice) => (
+                {displayVoices.map((voice) => (
                   <option key={voice.voiceURI} value={voice.voiceURI}>
                     {voice.name} ({voice.lang}) {voice.default ? ' - (Padrão)' : ''}
                   </option>
                 ))}
-                {voices.length === 0 && <option>Monitorando barramento de falas...</option>}
+                {displayVoices.length === 0 && <option>Monitorando barramento de falas...</option>}
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-[var(--text-muted)]">
                 <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
               </div>
             </div>
+            {ttsLocale && displayVoices.length === 0 && (
+              <p className="text-xs text-amber-500">Nenhuma voz encontrada para {selectedPack?.langName || ttsLocale}. Pode ser necessário reiniciar o aplicativo após instalar o pacote.</p>
+            )}
             <p className="text-xs text-[var(--text-darker)] leading-relaxed mb-4">As vozes operam processando áudio através das bibliotecas locais do Windows (SAPI)/SO. Nada é enviado à nuvem.</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

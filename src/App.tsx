@@ -211,7 +211,8 @@ export default function App() {
                onSetAiProvider={ai.setAiProvider} onSetAiModel={ai.setAiModel}
                onSetAiApiKey={ai.setAiApiKey} onSetAiLocalUrl={ai.setAiLocalUrl}
                onSaveConfigs={() => { ai.handleSaveConfigs(); setShowSaveToast(true); setTimeout(() => setShowSaveToast(false), 3000); }}
-               onCheckSpeechPacks={speech.checkSpeechPacks} onCheckSpeechPacksOnline={speech.checkSpeechPacksOnline} onInstallSpeechPack={speech.installSpeechPack} onRemoveSpeechPack={speech.removeSpeechPack}
+               onCheckSpeechPacks={speech.checkSpeechPacks} onCheckSpeechPacksOnline={speech.checkSpeechPacksOnline}
+               onInstallSpeechPack={speech.installSpeechPack} onRemoveSpeechPack={speech.removeSpeechPack}
                onSelectPack={speech.selectPack}
                speechPrivacyOk={speech.speechPrivacyOk}
                onCheckSpeechPrivacy={speech.checkSpeechPrivacy}
