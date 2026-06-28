@@ -360,6 +360,17 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     setCheckingPacks(false);
   };
 
+  const checkSpeechPacksOnline = async () => {
+    setCheckingPacks(true);
+    setSpeechPacksError(null);
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('check-speech-packs-online');
+      if (result.packs) setSpeechPacks(result.packs);
+    } catch { setSpeechPacksError('Erro ao buscar lista online.'); }
+    setCheckingPacks(false);
+  };
+
   const installSpeechPack = async (packName: string) => {
     setInstallingPack(packName);
     setInstallProgress(0);
@@ -436,7 +447,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     handleRead, handlePause, handleStop, toggleRecording,
     micError, clearMicError,
     speechPacks, selectedPackName, installProgress, installingPack, checkingPacks, speechPacksError,
-    checkSpeechPacks, installSpeechPack, removeSpeechPack, selectPack,
+    checkSpeechPacks, checkSpeechPacksOnline, installSpeechPack, removeSpeechPack, selectPack,
     speechPrivacyOk, checkSpeechPrivacy, acceptSpeechPrivacy, deactivateSpeechPrivacy
   };
 }

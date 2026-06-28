@@ -109,7 +109,7 @@ ipcMain.handle('check-speech-packs', async () => {
   }
 
   if ((result.error || !result.stdout.trim()) && result.stderr) {
-    return { error: 'DISM não disponível ou sem permissão. Execute como Administrador para listar pacotes de fala.' };
+    return { error: 'Sem permissões de administrador. Clique em "Buscar online" para ver todos os idiomas disponíveis.', partial: true };
   }
 
   try {
@@ -131,6 +131,89 @@ ipcMain.handle('check-speech-packs', async () => {
   } catch {
     return { error: 'Erro ao processar lista de pacotes de fala.' };
   }
+});
+
+// Curated list of ALL known Windows speech locale codes
+const SPEECH_LOCALES = [
+  { locale: 'af-ZA', lang: 'Afrikaans' }, { locale: 'am-ET', lang: 'Amharic' },
+  { locale: 'ar-SA', lang: 'Arabic' }, { locale: 'as-IN', lang: 'Assamese' },
+  { locale: 'az-AZ', lang: 'Azerbaijani' }, { locale: 'bg-BG', lang: 'Bulgarian' },
+  { locale: 'bn-BD', lang: 'Bengali' }, { locale: 'bs-BA', lang: 'Bosnian' },
+  { locale: 'ca-ES', lang: 'Catalan' }, { locale: 'cs-CZ', lang: 'Czech' },
+  { locale: 'cy-GB', lang: 'Welsh' }, { locale: 'da-DK', lang: 'Danish' },
+  { locale: 'de-DE', lang: 'German' }, { locale: 'el-GR', lang: 'Greek' },
+  { locale: 'en-AU', lang: 'English (Australia)' }, { locale: 'en-CA', lang: 'English (Canada)' },
+  { locale: 'en-GB', lang: 'English (UK)' }, { locale: 'en-IE', lang: 'English (Ireland)' },
+  { locale: 'en-IN', lang: 'English (India)' }, { locale: 'en-US', lang: 'English (US)' },
+  { locale: 'es-ES', lang: 'Spanish' }, { locale: 'es-MX', lang: 'Spanish (Mexico)' },
+  { locale: 'et-EE', lang: 'Estonian' }, { locale: 'eu-ES', lang: 'Basque' },
+  { locale: 'fa-IR', lang: 'Persian' }, { locale: 'fi-FI', lang: 'Finnish' },
+  { locale: 'fil-PH', lang: 'Filipino' }, { locale: 'fr-CA', lang: 'French (Canada)' },
+  { locale: 'fr-FR', lang: 'French' }, { locale: 'ga-IE', lang: 'Irish' },
+  { locale: 'gl-ES', lang: 'Galician' }, { locale: 'gu-IN', lang: 'Gujarati' },
+  { locale: 'ha-NG', lang: 'Hausa' }, { locale: 'he-IL', lang: 'Hebrew' },
+  { locale: 'hi-IN', lang: 'Hindi' }, { locale: 'hr-HR', lang: 'Croatian' },
+  { locale: 'hu-HU', lang: 'Hungarian' }, { locale: 'hy-AM', lang: 'Armenian' },
+  { locale: 'id-ID', lang: 'Indonesian' }, { locale: 'is-IS', lang: 'Icelandic' },
+  { locale: 'it-IT', lang: 'Italian' }, { locale: 'ja-JP', lang: 'Japanese' },
+  { locale: 'ka-GE', lang: 'Georgian' }, { locale: 'kk-KZ', lang: 'Kazakh' },
+  { locale: 'km-KH', lang: 'Khmer' }, { locale: 'kn-IN', lang: 'Kannada' },
+  { locale: 'ko-KR', lang: 'Korean' }, { locale: 'ku-TR', lang: 'Kurdish' },
+  { locale: 'ky-KG', lang: 'Kyrgyz' }, { locale: 'lb-LU', lang: 'Luxembourgish' },
+  { locale: 'lo-LA', lang: 'Lao' }, { locale: 'lt-LT', lang: 'Lithuanian' },
+  { locale: 'lv-LV', lang: 'Latvian' }, { locale: 'mi-NZ', lang: 'Maori' },
+  { locale: 'mk-MK', lang: 'Macedonian' }, { locale: 'ml-IN', lang: 'Malayalam' },
+  { locale: 'mn-MN', lang: 'Mongolian' }, { locale: 'mr-IN', lang: 'Marathi' },
+  { locale: 'ms-MY', lang: 'Malay' }, { locale: 'mt-MT', lang: 'Maltese' },
+  { locale: 'my-MM', lang: 'Burmese' }, { locale: 'nb-NO', lang: 'Norwegian' },
+  { locale: 'ne-NP', lang: 'Nepali' }, { locale: 'nl-NL', lang: 'Dutch' },
+  { locale: 'or-IN', lang: 'Odia' }, { locale: 'pa-IN', lang: 'Punjabi' },
+  { locale: 'pl-PL', lang: 'Polish' }, { locale: 'pt-BR', lang: 'Portuguese (Brazil)' },
+  { locale: 'pt-PT', lang: 'Portuguese (Portugal)' }, { locale: 'ro-RO', lang: 'Romanian' },
+  { locale: 'ru-RU', lang: 'Russian' }, { locale: 'sd-PK', lang: 'Sindhi' },
+  { locale: 'si-LK', lang: 'Sinhala' }, { locale: 'sk-SK', lang: 'Slovak' },
+  { locale: 'sl-SI', lang: 'Slovenian' }, { locale: 'sq-AL', lang: 'Albanian' },
+  { locale: 'sr-RS', lang: 'Serbian' }, { locale: 'sv-SE', lang: 'Swedish' },
+  { locale: 'sw-KE', lang: 'Swahili' }, { locale: 'ta-IN', lang: 'Tamil' },
+  { locale: 'te-IN', lang: 'Telugu' }, { locale: 'th-TH', lang: 'Thai' },
+  { locale: 'tk-TM', lang: 'Turkmen' }, { locale: 'tr-TR', lang: 'Turkish' },
+  { locale: 'tt-RU', lang: 'Tatar' }, { locale: 'ug-CN', lang: 'Uyghur' },
+  { locale: 'uk-UA', lang: 'Ukrainian' }, { locale: 'ur-PK', lang: 'Urdu' },
+  { locale: 'uz-UZ', lang: 'Uzbek' }, { locale: 'vi-VN', lang: 'Vietnamese' },
+  { locale: 'zh-CN', lang: 'Chinese (Simplified)' }, { locale: 'zh-HK', lang: 'Chinese (Hong Kong)' },
+  { locale: 'zh-TW', lang: 'Chinese (Traditional)' }, { locale: 'zu-ZA', lang: 'Zulu' },
+];
+
+// Search all known speech locales (online curated list + DISM cross-reference)
+ipcMain.handle('check-speech-packs-online', async () => {
+  let installedLocales = new Set();
+  try {
+    const cmd = "Get-WindowsCapability -Online -Name Language.Speech~~~* | ForEach-Object { $_.Name }";
+    const buf = Buffer.from(cmd, 'ucs2');
+    const encoded = buf.toString('base64');
+    const result = await new Promise((resolve) => {
+      execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+        timeout: 30000, windowsHide: true
+      }, (error, stdout) => {
+        resolve({ error, stdout: stdout || '' });
+      });
+    });
+    if (!result.error) {
+      result.stdout.trim().split(/\r?\n/).filter(Boolean).forEach(line => {
+        const m = line.match(/~~~([a-z]{2}-[A-Z]{2})~/);
+        if (m) installedLocales.add(m[1]);
+      });
+    }
+  } catch {}
+
+  const packs = SPEECH_LOCALES.map(({ locale, lang }) => ({
+    name: `Language.Speech~~~${locale}~9.0.1.0`,
+    displayName: lang,
+    locale,
+    langName: lang,
+    installed: installedLocales.has(locale)
+  }));
+  return { packs };
 });
 
 // Install a speech pack via DISM (triggers UAC) with progress polling

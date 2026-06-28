@@ -43,6 +43,7 @@ interface SettingsTabProps {
   onSetAiApiKey: (v: string) => void;
   onSetAiLocalUrl: (v: string) => void;
   onCheckSpeechPacks: () => void;
+  onCheckSpeechPacksOnline: () => void;
   onInstallSpeechPack: (name: string) => void;
   onRemoveSpeechPack: (name: string) => void;
   onSelectPack: (name: string) => void;
@@ -88,7 +89,7 @@ export function SettingsTab(props: SettingsTabProps) {
     onSetSelectedAudioInput, onSetSelectedAudioOutput, onSetReadSpecialChars,
     onSetAiProvider, onSaveConfigs,
     onSetAiModel, onSetAiApiKey, onSetAiLocalUrl,
-    onCheckSpeechPacks, onInstallSpeechPack, onRemoveSpeechPack, onSelectPack
+    onCheckSpeechPacks, onCheckSpeechPacksOnline, onInstallSpeechPack, onRemoveSpeechPack, onSelectPack
   } = props;
 
   const [packSearch, setPackSearch] = useState('');
@@ -238,6 +239,14 @@ export function SettingsTab(props: SettingsTabProps) {
                   <svg className={cn("w-3.5 h-3.5", checkingPacks && "animate-spin")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                   {checkingPacks ? 'Buscando...' : 'Buscar'}
                 </button>
+                <button
+                  onClick={onCheckSpeechPacksOnline}
+                  disabled={checkingPacks}
+                  className="text-xs bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-main)] px-3.5 py-1.5 rounded-lg hover:bg-[var(--bg-input)] active:scale-90 transition-all flex items-center gap-1.5 font-medium disabled:opacity-60"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+                  Online
+                </button>
               </div>
 
               <div className="relative mb-3">
@@ -251,8 +260,8 @@ export function SettingsTab(props: SettingsTabProps) {
               </div>
 
               {speechPacksError && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-3">
-                  <p className="text-xs text-red-500">{speechPacksError}</p>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-3">
+                  <p className="text-xs text-amber-500">{speechPacksError}</p>
                 </div>
               )}
 
