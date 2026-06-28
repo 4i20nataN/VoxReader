@@ -260,8 +260,8 @@ export function SettingsTab(props: SettingsTabProps) {
               </div>
 
               {speechPacksError && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-3">
-                  <p className="text-xs text-amber-500">{speechPacksError}</p>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-3">
+                  <p className="text-xs text-red-500">{speechPacksError}</p>
                 </div>
               )}
 

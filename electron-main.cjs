@@ -109,7 +109,7 @@ ipcMain.handle('check-speech-packs', async () => {
   }
 
   if ((result.error || !result.stdout.trim()) && result.stderr) {
-    return { error: 'Sem permissões de administrador. Clique em "Buscar online" para ver todos os idiomas disponíveis.', partial: true };
+    return { error: 'DISM não disponível ou sem permissão. Execute como Administrador para listar pacotes de fala.' };
   }
 
   try {
