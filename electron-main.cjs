@@ -1,22 +1,21 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session, ipcMain } = require('electron');
 const path = require('path');
-const { execFile } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const { execFile, spawn } = require('child_process');
+const readline = require('readline');
 
 let tray = null;
 let mainWindow = null;
 
 app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
-app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
 app.commandLine.appendSwitch('enable-features', 'WebSpeech');
-app.commandLine.appendSwitch('disable-features', 'NetworkService');
-// Pass Google Speech API key from env to Chromium if set
-if (process.env.GOOGLE_API_KEY) {
-  app.commandLine.appendSwitch('speech-api-key', process.env.GOOGLE_API_KEY);
-}
 
-function createWindow() {
+const DIST_PATH = path.join(__dirname, 'dist');
+
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000, height: 700,
     minWidth: 800, minHeight: 600,
@@ -26,9 +25,7 @@ function createWindow() {
     icon: path.join(__dirname, 'public/icon.svg')
   });
 
-  mainWindow.loadURL('http://localhost:3000').catch(() => {
-     mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
-  });
+  mainWindow.loadFile(path.join(DIST_PATH, 'index.html'));
 
   mainWindow.on('ready-to-show', () => mainWindow.show());
 
@@ -41,74 +38,215 @@ function createWindow() {
   });
 }
 
-// Start with Windows IPC handler
+// Start with Windows
 ipcMain.on('set-auto-launch', (_, enable) => {
   app.setLoginItemSettings({ openAtLogin: enable, args: ['--hidden'] });
 });
 
-// Windows built-in speech recognition (offline, via PowerShell + .NET System.Speech)
-ipcMain.handle('start-speech-recognition', async () => {
-  const psScript = `
-Add-Type -AssemblyName System.Speech
-try {
-  $cultures = @('pt-BR', 'pt-PT', $null)
-  $rec = $null
-  foreach ($c in $cultures) {
-    try {
-      if ($c) {
-        $ci = [System.Globalization.CultureInfo]::GetCultureInfo($c)
-        $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine($ci)
-      } else {
-        $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine
-      }
-      break
-    } catch { continue }
-  }
-  if (-not $rec) { Write-Output '__NO_RECOGNIZER__'; return }
-  $rec.SetInputToDefaultAudioDevice()
-  $grammar = New-Object System.Speech.Recognition.DictationGrammar
-  $rec.LoadGrammar($grammar)
-  $result = $rec.Recognize()
-  if ($result) {
-    Write-Output $result.Text
-  } else {
-    Write-Output '__NO_SPEECH__'
-  }
-} catch {
-  Write-Output "__ERROR__: $_"
-}
-`;
-  const buf = Buffer.from(psScript, 'ucs2');
+// List available Windows speech recognition packs via DISM
+ipcMain.handle('check-speech-packs', async () => {
+  const ps = `Get-WindowsCapability -Online | Where-Object { $_.Name -like 'Language.Speech~~~*' } | ForEach-Object { Write-Output ($_.Name + '|' + $_.DisplayName + '|' + $_.State) }`;
+  const buf = Buffer.from(ps, 'ucs2');
   const encoded = buf.toString('base64');
 
   return new Promise((resolve) => {
-    const child = execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
-      timeout: 30000,
-      windowsHide: true
-    }, (error, stdout, stderr) => {
-      const output = (stdout || '').trim();
-      if (output === '__NO_RECOGNIZER__') {
-        resolve({ error: 'Reconhecimento de fala do Windows não encontrado. Instale um pacote de reconhecimento de fala em: Configurações > Hora e Idioma > Fala > Baixar pacote de reconhecimento de fala.' });
-      } else if (output.startsWith('__ERROR__')) {
-        const errMsg = output.replace('__ERROR__', '').trim();
-        if (errMsg.includes('System.Speech')) {
-          resolve({ error: 'Reconhecimento de voz do Windows não disponível. Instale o pacote de idioma de Fala no Windows: Configurações > Hora e Idioma > Fala.' });
-        } else {
-          resolve({ error: errMsg });
-        }
-      } else if (output === '__NO_SPEECH__' || !output) {
-        resolve({ error: 'Nenhuma fala detectada. Tente novamente.' });
-      } else {
-        resolve({ text: output });
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 60000, windowsHide: true
+    }, (error, stdout) => {
+      if (error) { resolve({ error: 'Erro ao verificar pacotes de fala.' }); return; }
+      try {
+        const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+        const list = lines.map(line => {
+          const [name, , stateStr] = line.split('|');
+          return {
+            name: name || '',
+            displayName: name ? name.replace(/Language\.Speech~~~(.+)~\d+\.\d+\.\d+\.\d+/, '$1') : '',
+            installed: parseInt(stateStr, 10) === 4
+          };
+        });
+        resolve({ packs: list });
+      } catch {
+        resolve({ packs: [] });
       }
     });
-    child.on('error', () => resolve({ error: 'Erro ao iniciar reconhecimento de voz do Windows.' }));
   });
 });
 
-function showWindow() {
+// Install a speech pack via DISM (triggers UAC) with progress polling
+ipcMain.handle('install-speech-pack', async (event, packName) => {
+  const scriptPath = path.join(os.tmpdir(), `install-speech-${Date.now()}.ps1`);
+  const scriptContent = `Add-WindowsCapability -Online -Name "${packName}"`;
+  fs.writeFileSync(scriptPath, scriptContent, 'utf8');
+
+  const win = BrowserWindow.getAllWindows()[0];
+
+  const launchCmd = `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"' -Wait`;
+  const buf = Buffer.from(launchCmd, 'ucs2');
+  const encoded = buf.toString('base64');
+
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 600000, windowsHide: true
+    }, (launchError) => {
+      if (launchError) {
+        try { fs.unlinkSync(scriptPath); } catch {}
+        resolve({ error: 'Erro ao iniciar instalação. Verifique se o Windows é compatível.' });
+        return;
+      }
+      // Poll for completion
+      let attempts = 0;
+      const poll = () => {
+        const checkCmd = `$s = (Get-WindowsCapability -Online -Name "${packName}").State; if ($s -eq 4) { 'OK' } elseif ($s -eq 0) { 'NO' } else { 'FAIL:' + $s }`;
+        const checkBuf = Buffer.from(checkCmd, 'ucs2');
+        const checkEncoded = checkBuf.toString('base64');
+        execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', checkEncoded], {
+          timeout: 15000, windowsHide: true
+        }, (err, out) => {
+          const result = (out || '').trim();
+          if (result === 'OK') {
+            try { fs.unlinkSync(scriptPath); } catch {}
+            resolve({ success: true });
+          } else if (result.startsWith('FAIL:')) {
+            try { fs.unlinkSync(scriptPath); } catch {}
+            resolve({ error: 'Falha na instalação. Tente executar o instalador como Administrador manualmente.' });
+          } else if (attempts < 120) {
+            attempts++;
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('install-progress', { packName, progress: Math.min(attempts, 95) });
+            }
+            setTimeout(poll, 3000);
+          } else {
+            try { fs.unlinkSync(scriptPath); } catch {}
+            resolve({ error: 'Tempo limite excedido (6 min). Verifique sua conexão e tente novamente.' });
+          }
+        });
+      };
+      setTimeout(poll, 3000);
+    });
+  });
+});
+
+// Remove a speech pack via DISM (triggers UAC)
+ipcMain.handle('remove-speech-pack', async (event, packName) => {
+  const scriptPath = path.join(os.tmpdir(), `remove-speech-${Date.now()}.ps1`);
+  const scriptContent = `Remove-WindowsCapability -Online -Name "${packName}"`;
+  fs.writeFileSync(scriptPath, scriptContent, 'utf8');
+  const launchCmd = `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"' -Wait`;
+  const buf = Buffer.from(launchCmd, 'ucs2');
+  const encoded = buf.toString('base64');
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 600000, windowsHide: true
+    }, (launchError) => {
+      try { fs.unlinkSync(scriptPath); } catch {}
+      if (launchError) {
+        resolve({ error: 'Erro ao desinstalar pacote.' });
+      } else {
+        resolve({ success: true });
+      }
+    });
+  });
+});
+
+// Check if Windows speech privacy policy has been accepted
+ipcMain.handle('check-speech-privacy', async () => {
+  const ps = `
+    $hkcu = (Get-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy" -Name HasAccepted -ErrorAction 0).HasAccepted;
+    $hklm = 0;
+    try { $p = Get-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\InputPersonalization" -Name AllowInputPersonalization -ErrorAction Stop; $hklm = $p.AllowInputPersonalization } catch {}
+    if ($hkcu -eq 1 -or $hklm -eq 1) { '1' } else { '0' }
+  `.trim();
+  const buf = Buffer.from(ps, 'ucs2');
+  const encoded = buf.toString('base64');
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 10000, windowsHide: true
+    }, (error, stdout) => {
+      const out = (stdout || '').trim();
+      resolve({ accepted: out === '1' });
+    });
+  });
+});
+
+// Activate Windows speech recognition
+ipcMain.handle('accept-speech-privacy', async () => {
+  const ps = `
+    Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy" -Name "HasAccepted" -Value 1 -Force;
+    Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\InputPersonalization" -Name "AllowInputPersonalization" -Value 1 -Force;
+    Restart-Service -Name "Audiosrv" -Force
+  `;
+  const buf = Buffer.from(ps.trim(), 'ucs2');
+  const encoded = buf.toString('base64');
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 30000, windowsHide: true
+    }, (error) => {
+      if (error) resolve({ success: false, error: error.message });
+      else resolve({ success: true });
+    });
+  });
+});
+
+// Deactivate Windows speech recognition
+ipcMain.handle('deactivate-speech-privacy', async () => {
+  const ps = `
+    Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy" -Name "HasAccepted" -Value 0 -Force;
+    Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\InputPersonalization" -Name "AllowInputPersonalization" -Value 0 -Force;
+    Restart-Service -Name "Audiosrv" -Force
+  `;
+  const buf = Buffer.from(ps.trim(), 'ucs2');
+  const encoded = buf.toString('base64');
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+      timeout: 30000, windowsHide: true
+    }, (error) => {
+      if (error) resolve({ success: false, error: error.message });
+      else resolve({ success: true });
+    });
+  });
+});
+
+// Windows built-in speech recognition using user-chosen culture
+function getWorkerPath() {
+  if (app.isPackaged) return path.join(process.resourcesPath, 'speech-worker.exe');
+  return path.join(__dirname, 'resources', 'SpeechWorker.exe');
+}
+
+let activeWorker = null;
+let activeWorkerWin = null;
+
+ipcMain.handle('start-speech-recognition', async (event, culture) => {
+  if (activeWorker) { activeWorker.kill(); activeWorker = null; }
+  const workerPath = getWorkerPath();
+  if (!fs.existsSync(workerPath))
+    return { success: false, error: 'Worker não encontrado. Execute dotnet publish em speech-worker/' };
+
+  activeWorker = spawn(workerPath, ['--culture', culture || 'pt-BR'], { windowsHide: true });
+  activeWorkerWin = event.sender;
+
+  const rl = readline.createInterface({ input: activeWorker.stdout });
+  rl.on('line', (line) => {
+    try {
+      const result = JSON.parse(line);
+      if (event.sender && !event.sender.isDestroyed())
+        event.sender.send('recognition-result', result);
+    } catch {}
+  });
+
+  activeWorker.on('error', () => { activeWorker = null; activeWorkerWin = null; });
+  activeWorker.on('exit', () => { activeWorker = null; activeWorkerWin = null; });
+
+  return { success: true };
+});
+
+ipcMain.handle('stop-speech-recognition', async () => {
+  if (activeWorker) { activeWorker.kill(); activeWorker = null; activeWorkerWin = null; }
+  return { success: true };
+});
+
+async function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
-    createWindow();
+    await createWindow();
   } else {
     mainWindow.show();
     mainWindow.focus();
@@ -116,7 +254,7 @@ function showWindow() {
 }
 
 app.whenReady().then(() => {
-  // Auto-grant microphone permission for speech recognition
+  session.defaultSession.clearCache().catch(() => {});
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
     if (permission === 'media') { callback(true); } else { callback(false); }
   });
@@ -136,9 +274,7 @@ app.whenReady().then(() => {
       const dx = x - cx, dy = y - cy;
       const insideCircle = (dx * dx + dy * dy) < (radius * radius);
       if (insideCircle) {
-        // Blue circle (BGRA format on Windows)
         buf[i] = 235; buf[i+1] = 99; buf[i+2] = 37; buf[i+3] = 255;
-        // White play triangle on top
         const inTriangle = x >= 5 && x <= 12 && y >= 3 && y <= 12 &&
           (x - 5) <= (12 - 5) * ((y - 3) / (12 - 3)) &&
           (x - 5) <= (12 - 5) * ((12 - y) / (12 - 3));
@@ -171,7 +307,7 @@ app.whenReady().then(() => {
   app.on('activate', showWindow);
 });
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
-
-// Keep app alive in tray even when window is closed
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});
 app.on('window-all-closed', () => {});

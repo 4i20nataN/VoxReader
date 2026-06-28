@@ -3,6 +3,10 @@ import { Sparkles, Check, Save, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ThemeBg, ThemeAccent, backgroundPalettes, accentPalettes } from '../themes';
 
+interface SpeechPack {
+  name: string; displayName: string; installed: boolean;
+}
+
 interface SettingsTabProps {
   themeBg: ThemeBg;
   themeAccent: ThemeAccent;
@@ -19,6 +23,10 @@ interface SettingsTabProps {
   aiApiKey: string;
   aiLocalUrl: string;
   showSaveToast: boolean;
+  speechPacks: SpeechPack[];
+  selectedPackName: string;
+  installProgress: number;
+  installingPack: string | null;
   onSetThemeBg: (v: ThemeBg) => void;
   onSetThemeAccent: (v: ThemeAccent) => void;
   onSetStartWithWindows: (v: boolean) => void;
@@ -31,6 +39,14 @@ interface SettingsTabProps {
   onSetAiModel: (v: string) => void;
   onSetAiApiKey: (v: string) => void;
   onSetAiLocalUrl: (v: string) => void;
+  onCheckSpeechPacks: () => void;
+  onInstallSpeechPack: (name: string) => void;
+  onRemoveSpeechPack: (name: string) => void;
+  onSelectPack: (name: string) => void;
+  speechPrivacyOk: boolean | null;
+  onCheckSpeechPrivacy: () => void;
+  onAcceptSpeechPrivacy: () => void;
+  onDeactivateSpeechPrivacy: () => void;
 }
 
 function DebouncedInput({ value, onChange, ...props }: { value: string; onChange: (v: string) => void } & React.InputHTMLAttributes<HTMLInputElement>) {
@@ -63,11 +79,19 @@ export function SettingsTab(props: SettingsTabProps) {
     themeBg, themeAccent, startWithWindows, voices, selectedVoiceURI,
     audioInputs, audioOutputs, selectedAudioInput, selectedAudioOutput,
     readSpecialChars, aiProvider, aiModel, aiApiKey, aiLocalUrl, showSaveToast,
+    speechPacks, selectedPackName, installProgress, installingPack,
+    speechPrivacyOk, onCheckSpeechPrivacy, onAcceptSpeechPrivacy, onDeactivateSpeechPrivacy,
     onSetThemeBg, onSetThemeAccent, onSetStartWithWindows, onSetSelectedVoiceURI,
     onSetSelectedAudioInput, onSetSelectedAudioOutput, onSetReadSpecialChars,
     onSetAiProvider, onSaveConfigs,
-    onSetAiModel, onSetAiApiKey, onSetAiLocalUrl
+    onSetAiModel, onSetAiApiKey, onSetAiLocalUrl,
+    onCheckSpeechPacks, onInstallSpeechPack, onRemoveSpeechPack, onSelectPack
   } = props;
+
+  const installedPacks = speechPacks.filter(p => p.installed);
+  const availablePacks = speechPacks.filter(p => !p.installed);
+
+  const isElectron = typeof (window as any).require === 'function' && navigator.userAgent.includes('Electron');
 
   return (
     <div className="absolute inset-0 overflow-y-auto p-4 sm:p-6 lg:p-10">
@@ -92,6 +116,150 @@ export function SettingsTab(props: SettingsTabProps) {
               <span className="text-sm text-[var(--text-main)] group-hover:text-[var(--accent-hover)] transition-colors">Iniciar o leitor junto com o Windows<br/><span className="text-xs text-[var(--text-muted)] font-normal">(Funciona apenas na versão instalada)</span></span>
             </label>
           </div>
+
+          {isElectron && (
+          <div className="space-y-4">
+            <h3 className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] pb-2 mb-4">Reconhecimento de Fala (Windows)</h3>
+
+            <div className="bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-[var(--text-light)]">Reconhecimento de Fala do Windows</span>
+                <button
+                  onClick={speechPrivacyOk === true ? onDeactivateSpeechPrivacy : onAcceptSpeechPrivacy}
+                  disabled={speechPrivacyOk === null}
+                  className={cn(
+                    "text-xs px-3 py-1.5 rounded-lg font-medium transition-all active:scale-90",
+                    speechPrivacyOk === true
+                      ? "bg-red-500 text-white hover:bg-red-600"
+                      : speechPrivacyOk === false
+                        ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                        : "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)]"
+                  )}
+                >
+                  {speechPrivacyOk === true ? 'Desativar' : speechPrivacyOk === false ? 'Ativar' : 'Verificando...'}
+                </button>
+              </div>
+              <hr className="border-[var(--border-color)] mb-3" />
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm font-medium text-[var(--text-light)] flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                  Pacotes de Fala
+                </span>
+                <button
+                  onClick={onCheckSpeechPacks}
+                  className="text-xs bg-[var(--accent-color)] text-white px-3.5 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] active:scale-90 transition-all flex items-center gap-1.5 font-medium"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  Buscar
+                </button>
+              </div>
+
+              {speechPacks.length === 0 && (
+                <p className="text-xs text-[var(--text-darker)] text-center py-6">Clique em "Buscar" para listar os pacotes disponíveis.</p>
+              )}
+
+              {speechPacks.map(pack => {
+                const isInstalled = pack.installed;
+                const isSelected = selectedPackName === pack.name;
+                const isDownloading = installingPack === pack.name;
+
+                return (
+                  <div key={pack.name} className={cn(
+                    "flex items-center justify-between py-3 px-3 rounded-lg mb-1.5 transition-all border",
+                    isSelected
+                      ? "bg-[var(--accent-transparent)] border-[var(--accent-border)] shadow-sm"
+                      : isInstalled
+                        ? "border-[var(--border-color)] hover:bg-[var(--bg-input)]"
+                        : "border-transparent hover:bg-[var(--bg-input)]"
+                  )}>
+                    <div className="flex items-center gap-3">
+                      {isSelected ? (
+                        <div className="w-5 h-5 rounded-full bg-[var(--accent-hover)] flex items-center justify-center shrink-0">
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                        </div>
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border-2 border-[var(--border-color)] shrink-0" />
+                      )}
+                      <div>
+                        <span className={cn(
+                          "text-sm",
+                          isSelected ? "text-[var(--accent-hover)] font-semibold" : "text-[var(--text-main)]"
+                        )}>
+                          {pack.displayName || pack.name}
+                        </span>
+                        {isInstalled && (
+                          <div className="flex gap-1.5 mt-0.5">
+                            <span className={cn(
+                              "text-[10px] font-medium",
+                              isSelected ? "text-[var(--accent-hover)]" : "text-emerald-500"
+                            )}>
+                              {isSelected ? '✓ Ativo' : 'Instalado'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isDownloading && installProgress > 0 && (
+                        <div className="w-16 h-1.5 bg-[var(--bg-input)] rounded-full overflow-hidden">
+                          <div className="h-full bg-[var(--accent-hover)] rounded-full transition-all" style={{ width: `${installProgress}%` }}></div>
+                        </div>
+                      )}
+                      {isInstalled ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => onSelectPack(pack.name)}
+                            disabled={isSelected}
+                            className={cn(
+                              "text-xs px-3 py-1.5 rounded-lg font-medium transition-all active:scale-90 min-w-[4.5rem]",
+                              isSelected
+                                ? "bg-emerald-500 text-white cursor-default shadow-sm"
+                                : "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)]"
+                            )}
+                          >
+                            {isSelected ? 'Em uso' : 'Usar'}
+                          </button>
+                          <button
+                            onClick={() => onRemoveSpeechPack(pack.name)}
+                            className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all active:scale-90 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
+                          >
+                            Desinstalar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onInstallSpeechPack(pack.name)}
+                          disabled={isDownloading}
+                          className="text-xs bg-[var(--accent-color)] text-white px-3 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-60 transition-all active:scale-90 flex items-center gap-1"
+                        >
+                          {isDownloading ? (
+                            <>{installProgress > 0 ? `${installProgress}%` : '...'}</>
+                          ) : 'Baixar'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {installingPack && (
+                <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                  <div className="flex justify-between text-xs text-[var(--text-darker)] mb-1.5">
+                    <span>Instalando...</span>
+                    <span>{installProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-[var(--bg-input)] rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-[var(--accent-color)] to-[var(--accent-hover)] rounded-full transition-all duration-1000" style={{ width: `${installProgress}%` }}></div>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-darker)] mt-1">Aceite a solicitação de permissão de administrador (UAC) para continuar.</p>
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-[var(--text-darker)] leading-relaxed">Baixe o pacote de fala do seu idioma e clique em "Usar" para ativar a transcrição por voz offline.</p>
+          </div>
+          )}
 
           <hr className="border-[var(--border-color)]" />
 
