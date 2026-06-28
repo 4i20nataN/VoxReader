@@ -6,6 +6,7 @@ import {
   ArrowDownToLine, Type, AlignVerticalSpaceAround, MoveHorizontal
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { loadData, saveData } from '../lib/persistence';
 
 interface EditorTabProps {
   text: string;
@@ -88,7 +89,7 @@ function HighlightedText({ text, highlightStart, highlightEnd, markerIndex }: { 
         const segments: React.ReactNode[] = [];
         const hasMarkerOnThisLine = markerIndex !== null && markerIndex >= lineStart && markerIndex < lineEnd;
         let i = lineStart;
-        while (i <= lineEnd) {
+        while (i < lineEnd) {
           if (hasMarkerOnThisLine && i === markerIndex) {
             segments.push(
               <span key={`m${i}`} className="inline-flex items-center">
@@ -102,9 +103,10 @@ function HighlightedText({ text, highlightStart, highlightEnd, markerIndex }: { 
               <span key={`h${i}`} className="bg-cyan-400/15 rounded-sm px-px -mx-px">{text.slice(i, highlightEnd)}</span>
             );
             i = highlightEnd;
-          } else if (i < lineEnd) {
-            const nextMarker = hasMarkerOnThisLine ? Math.min(markerIndex!, highlightStart > i ? Math.min(highlightStart, lineEnd) : lineEnd) : (highlightStart > i ? Math.min(highlightStart, lineEnd) : lineEnd);
-            const nextStop = hasMarkerOnThisLine && markerIndex! > i && markerIndex! < nextMarker ? markerIndex! : nextMarker;
+          } else {
+            let nextStop = lineEnd;
+            if (highlightStart > i) nextStop = Math.min(nextStop, highlightStart);
+            if (hasMarkerOnThisLine && markerIndex! > i) nextStop = Math.min(nextStop, markerIndex!);
             const chunk = text.slice(i, nextStop);
             const chars: React.ReactNode[] = [];
             for (let c = 0; c < chunk.length; c++) {
@@ -114,7 +116,7 @@ function HighlightedText({ text, highlightStart, highlightEnd, markerIndex }: { 
             }
             segments.push(<span key={`n${i}`}>{chars}</span>);
             i = nextStop;
-          } else { break; }
+          }
         }
         charOffset = lineEnd + 1;
         return <span key={li}>{segments}{li < lines.length - 1 ? '\n' : ''}</span>;
@@ -141,23 +143,36 @@ export function EditorTab({
   const scrollMeasureRef = useRef<HTMLDivElement>(null);
   const [readStartOffset, setReadStartOffset] = useState(0);
   const [fontSize, setFontSize] = useState(() => {
-    const saved = localStorage.getItem('editor_font_size');
+    const saved = loadData('editor_font_size');
     return saved ? parseInt(saved) : 16;
   });
   const [lineHeight, setLineHeight] = useState(() => {
-    const saved = localStorage.getItem('editor_line_height');
+    const saved = loadData('editor_line_height');
     return saved ? parseFloat(saved) : 1.625;
   });
   const [letterSpacing, setLetterSpacing] = useState(() => {
-    const saved = localStorage.getItem('editor_letter_spacing');
+    const saved = loadData('editor_letter_spacing');
     return saved ? parseFloat(saved) : 0;
   });
   const [autoScroll, setAutoScroll] = useState(() => {
-    return localStorage.getItem('editor_auto_scroll') === 'true';
+    return loadData('editor_auto_scroll') === 'true';
   });
   const [readingStartMarker, setReadingStartMarker] = useState<number | null>(null);
   const [useMarkerOnNextPlay, setUseMarkerOnNextPlay] = useState(false);
   const resetScrollRef = useRef(false);
+
+  const syncScroll = useCallback(() => {
+    const ta = textareaRef.current;
+    const hl = highlightRef.current;
+    if (ta && hl) { hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; }
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) { ta.scrollTop = 0; ta.scrollLeft = 0; ta.selectionStart = 0; ta.selectionEnd = 0; syncScroll(); }
+    });
+  }, [syncScroll]);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -166,15 +181,7 @@ export function EditorTab({
       setReadingStartMarker(null);
       setUseMarkerOnNextPlay(false);
       setLocalText(text);
-      requestAnimationFrame(() => {
-        if (textareaRef.current) {
-          textareaRef.current.scrollTop = 0;
-          textareaRef.current.scrollLeft = 0;
-          textareaRef.current.selectionStart = 0;
-          textareaRef.current.selectionEnd = 0;
-          syncScroll();
-        }
-      });
+      scrollToTop();
       return;
     }
     if (!ta) { setLocalText(text); return; }
@@ -185,10 +192,10 @@ export function EditorTab({
       if (ta) { ta.scrollTop = prevScrollTop; ta.scrollLeft = prevScrollLeft; }
     });
   }, [text, syncScroll]);
-  useEffect(() => { localStorage.setItem('editor_font_size', fontSize.toString()); }, [fontSize]);
-  useEffect(() => { localStorage.setItem('editor_line_height', lineHeight.toString()); }, [lineHeight]);
-  useEffect(() => { localStorage.setItem('editor_letter_spacing', letterSpacing.toString()); }, [letterSpacing]);
-  useEffect(() => { localStorage.setItem('editor_auto_scroll', autoScroll.toString()); }, [autoScroll]);
+  useEffect(() => { saveData('editor_font_size', fontSize.toString()); }, [fontSize]);
+  useEffect(() => { saveData('editor_line_height', lineHeight.toString()); }, [lineHeight]);
+  useEffect(() => { saveData('editor_letter_spacing', letterSpacing.toString()); }, [letterSpacing]);
+  useEffect(() => { saveData('editor_auto_scroll', autoScroll.toString()); }, [autoScroll]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -205,12 +212,6 @@ export function EditorTab({
   const textNotEmpty = localText.trim().length > 0;
 
   useEffect(() => { return () => clearTimeout(debounceRef.current); }, []);
-
-  const syncScroll = useCallback(() => {
-    const ta = textareaRef.current;
-    const hl = highlightRef.current;
-    if (ta && hl) { hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; }
-  }, []);
 
   const increaseFont = useCallback(() => setFontSize(s => Math.min(s + 2, MAX_FONT)), []);
   const decreaseFont = useCallback(() => setFontSize(s => Math.max(s - 2, MIN_FONT)), []);
@@ -267,6 +268,11 @@ export function EditorTab({
     const textFromCursor = localText.substring(startIdx);
     if (textFromCursor.trim()) onRead(textFromCursor);
   }, [localText, onRead]);
+
+  const handlePauseWithMarkerClear = useCallback(() => {
+    setUseMarkerOnNextPlay(false);
+    onPause();
+  }, [onPause]);
 
   const handleTextClick = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
     if (e.ctrlKey) {
@@ -363,7 +369,7 @@ export function EditorTab({
       <div className="flex-1 relative flex flex-col min-h-0 group">
         <div className="flex-1 w-full relative rounded-xl overflow-hidden border border-[var(--border-color)] transition-colors duration-300"
           style={{
-            backgroundImage: 'linear-gradient(var(--border-color) 1px, transparent 1px), linear-gradient(90deg, var(--border-color) 1px, transparent 1px)',
+            backgroundImage: 'linear-gradient(var(--border-hover) 1.5px, transparent 1.5px), linear-gradient(90deg, var(--border-hover) 1.5px, transparent 1.5px)',
             backgroundSize: '32px 32px',
             backgroundPosition: '-1px -1px',
           }}
@@ -393,7 +399,7 @@ export function EditorTab({
             onBlur={handleBlur}
             onScroll={syncScroll}
             onClick={handleTextClick}
-            onPaste={() => { if (!isSpeaking) resetScrollRef.current = true; }}
+            onPaste={() => { if (!isSpeaking) { resetScrollRef.current = true; setTimeout(scrollToTop, 0); } }}
             placeholder=""
             className="absolute inset-0 w-full h-full bg-transparent border-none p-4 md:p-6 leading-relaxed focus:outline-none resize-none"
             style={textareaStyle}
@@ -485,11 +491,8 @@ export function EditorTab({
         </div>
 
         <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto justify-center">
-          <button onClick={() => { onStop(); if (readingStartMarker !== null) setUseMarkerOnNextPlay(true); }} disabled={!isSpeaking && !isPaused} aria-label="Parar leitura" className="w-12 h-12 flex items-center justify-center rounded-xl bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-hover)] disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-hover)] relative">
+          <button onClick={() => { onStop(); if (readingStartMarker !== null) setUseMarkerOnNextPlay(true); }} disabled={!isSpeaking && !isPaused} aria-label="Parar leitura" className="w-12 h-12 flex items-center justify-center rounded-xl bg-[var(--bg-panel)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-hover)] disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-hover)]">
             <Square size={18} fill="currentColor" />
-            {readingStartMarker !== null && !useMarkerOnNextPlay && (
-              <span className="absolute bottom-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full" title="Parar para ler do ponto marcado" />
-            )}
           </button>
           {!isSpeaking ? (
             <button id="play-button" onClick={() => {
@@ -501,14 +504,11 @@ export function EditorTab({
                 } else {
                   handleReadFromCursor();
                 }
-              }} disabled={!textNotEmpty || isProcessingImage} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2 transition-all shadow-[0_4px_14px_var(--accent-transparent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-transparent)] relative">
+              }} disabled={!textNotEmpty || isProcessingImage} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold disabled:opacity-50 flex justify-center items-center gap-2 transition-all shadow-[0_4px_14px_var(--accent-transparent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-transparent)]">
               <Play size={18} fill="currentColor" /> <span className="hidden sm:inline">Ler Agora</span>
-              {useMarkerOnNextPlay && readingStartMarker !== null && (
-                <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" title="Iniciará do ponto marcado" />
-              )}
             </button>
           ) : (
-            <button onClick={onPause} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-bold flex justify-center items-center gap-2 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50">
+            <button onClick={handlePauseWithMarkerClear} className="flex-1 sm:flex-none px-6 md:px-8 h-12 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-bold flex justify-center items-center gap-2 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50">
               <Pause size={18} fill="currentColor" /> <span className="hidden sm:inline">Pausar</span>
             </button>
           )}

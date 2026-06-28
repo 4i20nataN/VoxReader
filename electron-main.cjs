@@ -4,16 +4,48 @@ const fs = require('fs');
 const os = require('os');
 const { execFile, spawn } = require('child_process');
 const readline = require('readline');
+const http = require('http');
 
 let tray = null;
 let mainWindow = null;
+let staticServer = null;
 
 app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('js-flags', '--max_old_space_size=256 --optimize-for-size');
 app.commandLine.appendSwitch('enable-features', 'WebSpeech');
 
-const DIST_PATH = path.join(__dirname, 'dist');
+const MIME = {
+  '.html': 'text/html;charset=utf-8',
+  '.js': 'application/javascript;charset=utf-8',
+  '.css': 'text/css;charset=utf-8',
+  '.json': 'application/json;charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
+
+const DATA_DIR = path.join(__dirname, 'user-data');
+
+const DIST_PORT = 51999;
+
+function serveDist(cb) {
+  const dist = path.join(__dirname, 'dist');
+  const server = http.createServer((req, res) => {
+    const uri = decodeURIComponent(req.url).split('?')[0];
+    let filePath = path.join(dist, uri === '/' ? 'index.html' : uri);
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end('404'); return; }
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+      res.end(data);
+    });
+  });
+  server.listen(DIST_PORT, '127.0.0.1', () => cb(server));
+  server.on('error', () => {
+    server.listen(0, '127.0.0.1', () => cb(server));
+  });
+}
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -25,7 +57,19 @@ async function createWindow() {
     icon: path.join(__dirname, 'public/icon.svg')
   });
 
-  mainWindow.loadFile(path.join(DIST_PATH, 'index.html'));
+  if (!app.isPackaged) {
+    mainWindow.loadURL('http://localhost:3000').catch(() => {
+      serveDist((server) => {
+        staticServer = server;
+        mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
+      });
+    });
+  } else {
+    serveDist((server) => {
+      staticServer = server;
+      mainWindow.loadURL(`http://127.0.0.1:${server.address().port}`);
+    });
+  }
 
   mainWindow.on('ready-to-show', () => mainWindow.show());
 
@@ -45,31 +89,48 @@ ipcMain.on('set-auto-launch', (_, enable) => {
 
 // List available Windows speech recognition packs via DISM
 ipcMain.handle('check-speech-packs', async () => {
-  const ps = `Get-WindowsCapability -Online | Where-Object { $_.Name -like 'Language.Speech~~~*' } | ForEach-Object { Write-Output ($_.Name + '|' + $_.DisplayName + '|' + $_.State) }`;
-  const buf = Buffer.from(ps, 'ucs2');
-  const encoded = buf.toString('base64');
+  const dismCmd = "Get-WindowsCapability -Online | Where-Object { $_.Name -like 'Language.Speech~~~*' } | ForEach-Object { Write-Output ($_.Name + '|' + $_.DisplayName + '|' + $_.State) }";
 
-  return new Promise((resolve) => {
+  const runPs = (cmd) => new Promise((resolve) => {
+    const buf = Buffer.from(cmd, 'ucs2');
+    const encoded = buf.toString('base64');
     execFile('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
       timeout: 60000, windowsHide: true
-    }, (error, stdout) => {
-      if (error) { resolve({ error: 'Erro ao verificar pacotes de fala.' }); return; }
-      try {
-        const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
-        const list = lines.map(line => {
-          const [name, , stateStr] = line.split('|');
-          return {
-            name: name || '',
-            displayName: name ? name.replace(/Language\.Speech~~~(.+)~\d+\.\d+\.\d+\.\d+/, '$1') : '',
-            installed: parseInt(stateStr, 10) === 4
-          };
-        });
-        resolve({ packs: list });
-      } catch {
-        resolve({ packs: [] });
-      }
+    }, (error, stdout, stderr) => {
+      resolve({ error, stdout, stderr });
     });
   });
+
+  const fallbackCmd = "Get-WindowsCapability -Online -Name Language.Speech~~~* | ForEach-Object { Write-Output ($_.Name + '|' + $_.DisplayName + '|' + $_.State) }";
+
+  let result = await runPs(dismCmd);
+  if (result.error || !result.stdout.trim()) {
+    result = await runPs(fallbackCmd);
+  }
+
+  if ((result.error || !result.stdout.trim()) && result.stderr) {
+    return { error: 'DISM não disponível ou sem permissão. Execute como Administrador para listar pacotes de fala.' };
+  }
+
+  try {
+    const lines = (result.stdout || '').trim().split(/\r?\n/).filter(Boolean);
+    const list = lines.map(line => {
+      const [name, displayName, stateStr] = line.split('|');
+      const localeMatch = name && name.match(/~~~([a-z]{2}-[A-Z]{2})~/);
+      const locale = localeMatch ? localeMatch[1] : '';
+      const langName = locale ? new Intl.DisplayNames(['pt-BR'], { type: 'language' }).of(locale) : '';
+      return {
+        name: name || '',
+        displayName: displayName || locale || name || '',
+        locale,
+        langName: langName || locale,
+        installed: parseInt(stateStr, 10) === 4
+      };
+    });
+    return { packs: list };
+  } catch {
+    return { error: 'Erro ao processar lista de pacotes de fala.' };
+  }
 });
 
 // Install a speech pack via DISM (triggers UAC) with progress polling
@@ -244,6 +305,32 @@ ipcMain.handle('stop-speech-recognition', async () => {
   return { success: true };
 });
 
+// File persistence IPC (save/load data as .txt files in DATA_DIR)
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+ipcMain.on('file:save', (event, key, data) => {
+  try {
+    fs.writeFileSync(path.join(DATA_DIR, `${key}.txt`), data, 'utf8');
+    event.returnValue = { success: true };
+  } catch (e) {
+    event.returnValue = { success: false, error: String(e) };
+  }
+});
+
+ipcMain.on('file:load', (event, key) => {
+  try {
+    const filePath = path.join(DATA_DIR, `${key}.txt`);
+    if (!fs.existsSync(filePath)) {
+      event.returnValue = { success: true, data: null };
+      return;
+    }
+    const data = fs.readFileSync(filePath, 'utf8');
+    event.returnValue = { success: true, data };
+  } catch (e) {
+    event.returnValue = { success: false, error: String(e) };
+  }
+});
+
 async function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     await createWindow();
@@ -254,7 +341,6 @@ async function showWindow() {
 }
 
 app.whenReady().then(() => {
-  session.defaultSession.clearCache().catch(() => {});
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
     if (permission === 'media') { callback(true); } else { callback(false); }
   });
@@ -309,5 +395,6 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  if (staticServer) { staticServer.close(); staticServer = null; }
 });
 app.on('window-all-closed', () => {});

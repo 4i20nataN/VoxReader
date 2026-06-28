@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { HistoryItem } from '../types';
+import { loadData, saveData } from '../lib/persistence';
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -27,10 +28,19 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   const [selectedAudioOutput, setSelectedAudioOutput] = useState<string>('default');
   const [micError, setMicError] = useState<string | null>(null);
   const [speechPrivacyOk, setSpeechPrivacyOk] = useState<boolean | null>(null);
-  const [speechPacks, setSpeechPacks] = useState<{ name: string; displayName: string; installed: boolean }[]>([]);
+  interface SpeechPack {
+    name: string; displayName: string; installed: boolean;
+    locale?: string; langName?: string;
+  }
+  const [speechPacks, setSpeechPacks] = useState<SpeechPack[]>(() => {
+    const saved = loadData('speech_packs_list');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [checkingPacks, setCheckingPacks] = useState(false);
+  const [speechPacksError, setSpeechPacksError] = useState<string | null>(null);
   const [installingPack, setInstallingPack] = useState<string | null>(null);
   const [installProgress, setInstallProgress] = useState(0);
-  const [selectedPackName, setSelectedPackName] = useState(() => localStorage.getItem('selected_speech_pack') || '');
+  const [selectedPackName, setSelectedPackName] = useState(() => loadData('selected_speech_pack') || '');
 
   const packToCulture = (name: string) => {
     const m = name.match(/~~~([a-z]{2}-[A-Z]{2})~/);
@@ -49,21 +59,21 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   };
 
   useEffect(() => {
-    const savedRate = localStorage.getItem('reader_rate');
+    const savedRate = loadData('reader_rate');
     if (savedRate) setRate(parseFloat(savedRate));
-    const savedWinStart = localStorage.getItem('reader_win_start');
+    const savedWinStart = loadData('reader_win_start');
     if (savedWinStart === 'true') setStartWithWindows(true);
-    const savedSpecialChars = localStorage.getItem('leitor_special_chars');
+    const savedSpecialChars = loadData('leitor_special_chars');
     if (savedSpecialChars === 'true') setReadSpecialChars(true);
-    const savedInput = localStorage.getItem('leitor_audio_input');
+    const savedInput = loadData('leitor_audio_input');
     if (savedInput) setSelectedAudioInput(savedInput);
-    const savedOutput = localStorage.getItem('leitor_audio_output');
+    const savedOutput = loadData('leitor_audio_output');
     if (savedOutput) setSelectedAudioOutput(savedOutput);
 
     const updateVoices = () => {
       const availableVoices = synthRef.current.getVoices();
       setVoices(availableVoices);
-      const savedVoice = localStorage.getItem('reader_voice');
+      const savedVoice = loadData('reader_voice');
       if (savedVoice && availableVoices.find(v => v.voiceURI === savedVoice)) {
         setSelectedVoiceURI(savedVoice);
       } else if (availableVoices.length > 0) {
@@ -127,10 +137,13 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   }, []);
 
   // Persistence effects
-  useEffect(() => { localStorage.setItem('reader_rate', rate.toString()); }, [rate]);
-  useEffect(() => { localStorage.setItem('reader_voice', selectedVoiceURI); }, [selectedVoiceURI]);
+  useEffect(() => { saveData('reader_rate', rate.toString()); }, [rate]);
+  useEffect(() => { saveData('reader_voice', selectedVoiceURI); }, [selectedVoiceURI]);
+  useEffect(() => { saveData('leitor_special_chars', readSpecialChars ? 'true' : 'false'); }, [readSpecialChars]);
+  useEffect(() => { saveData('leitor_audio_input', selectedAudioInput); }, [selectedAudioInput]);
+  useEffect(() => { saveData('leitor_audio_output', selectedAudioOutput); }, [selectedAudioOutput]);
   useEffect(() => {
-    localStorage.setItem('reader_win_start', startWithWindows ? 'true' : 'false');
+    saveData('reader_win_start', startWithWindows ? 'true' : 'false');
     try {
       const { ipcRenderer } = (window as any).require('electron');
       ipcRenderer.send('set-auto-launch', startWithWindows);
@@ -321,16 +334,30 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     } catch { setMicError('Erro ao comunicar com o Windows.'); }
   };
 
+  // Save speech packs for persistence
+  useEffect(() => { saveData('speech_packs_list', JSON.stringify(speechPacks)); }, [speechPacks]);
+
   // Auto-check on mount
-  useEffect(() => { checkSpeechPrivacy(); }, []);
+  useEffect(() => {
+    checkSpeechPrivacy();
+    const isElectron = typeof (window as any).require === 'function' && navigator.userAgent.includes('Electron');
+    if (isElectron) {
+      // Refresh pack list in background (UI already shows persisted list)
+      checkSpeechPacks();
+    }
+  }, []);
 
   // Windows speech pack management
   const checkSpeechPacks = async () => {
+    setCheckingPacks(true);
+    setSpeechPacksError(null);
     try {
       const { ipcRenderer } = (window as any).require('electron');
       const result = await ipcRenderer.invoke('check-speech-packs');
       if (result.packs) setSpeechPacks(result.packs);
-    } catch { /* not in Electron */ }
+      if (result.error) setSpeechPacksError(result.error);
+    } catch { setSpeechPacksError('Erro ao verificar pacotes.'); }
+    setCheckingPacks(false);
   };
 
   const installSpeechPack = async (packName: string) => {
@@ -368,7 +395,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
 
   const selectPack = (packName: string) => {
     setSelectedPackName(packName);
-    localStorage.setItem('selected_speech_pack', packName);
+    saveData('selected_speech_pack', packName);
   };
 
   // Listen for install progress from main process
@@ -384,7 +411,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
   }, [installingPack]);
 
   // Persist selected pack
-  useEffect(() => { localStorage.setItem('selected_speech_pack', selectedPackName); }, [selectedPackName]);
+  useEffect(() => { saveData('selected_speech_pack', selectedPackName); }, [selectedPackName]);
 
   // Global Play/Pause wrapper for Electron
   useEffect(() => {
@@ -408,7 +435,7 @@ export function useSpeech({ text, onTextChange, onStatusChange, onAddHistoryItem
     setSelectedVoiceURI, setRate, activeVoiceName,
     handleRead, handlePause, handleStop, toggleRecording,
     micError, clearMicError,
-    speechPacks, selectedPackName, installProgress, installingPack,
+    speechPacks, selectedPackName, installProgress, installingPack, checkingPacks, speechPacksError,
     checkSpeechPacks, installSpeechPack, removeSpeechPack, selectPack,
     speechPrivacyOk, checkSpeechPrivacy, acceptSpeechPrivacy, deactivateSpeechPrivacy
   };

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HistoryItem } from '../types';
+import { loadData, saveData } from '../lib/persistence';
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -11,17 +12,17 @@ export function useHistory() {
   const [historySort, setHistorySort] = useState<'newest' | 'oldest' | 'longest'>('newest');
 
   useEffect(() => {
-    const saved = localStorage.getItem('reader_history');
+    const saved = loadData('reader_history');
     if (saved) setHistory(JSON.parse(saved));
-    const savedClip = localStorage.getItem('reader_clipboard');
+    const savedClip = loadData('reader_clipboard');
     if (savedClip) setClipboardHistory(JSON.parse(savedClip));
-    const savedTexts = localStorage.getItem('leitor_saved_texts');
+    const savedTexts = loadData('leitor_saved_texts');
     if (savedTexts) setSavedTexts(JSON.parse(savedTexts));
   }, []);
 
-  useEffect(() => { localStorage.setItem('reader_history', JSON.stringify(history)); }, [history]);
-  useEffect(() => { localStorage.setItem('reader_clipboard', JSON.stringify(clipboardHistory)); }, [clipboardHistory]);
-  useEffect(() => { localStorage.setItem('leitor_saved_texts', JSON.stringify(savedTexts)); }, [savedTexts]);
+  useEffect(() => { saveData('reader_history', JSON.stringify(history)); }, [history]);
+  useEffect(() => { saveData('reader_clipboard', JSON.stringify(clipboardHistory)); }, [clipboardHistory]);
+  useEffect(() => { saveData('leitor_saved_texts', JSON.stringify(savedTexts)); }, [savedTexts]);
 
   const toggleFavorite = (id: string, isClipboard = false) => {
     if (isClipboard) {

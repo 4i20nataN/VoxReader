@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { loadData, saveData } from '../lib/persistence';
 
 export function useAI() {
   const [aiProvider, setAiProvider] = useState<'google' | 'openrouter' | 'local'>('google');
@@ -15,27 +16,27 @@ export function useAI() {
   const [targetLang, setTargetLang] = useState('Inglês');
 
   useEffect(() => {
-    if (localStorage.getItem('leitor_ai_provider')) setAiProvider(localStorage.getItem('leitor_ai_provider') as any);
-    if (localStorage.getItem('leitor_ai_key')) setAiApiKey(localStorage.getItem('leitor_ai_key') as string);
-    if (localStorage.getItem('leitor_ai_model')) setAiModel(localStorage.getItem('leitor_ai_model') as string);
-    if (localStorage.getItem('leitor_ai_url')) setAiLocalUrl(localStorage.getItem('leitor_ai_url') as string);
+    if (loadData('leitor_ai_provider')) setAiProvider(loadData('leitor_ai_provider') as any);
+    if (loadData('leitor_ai_key')) setAiApiKey(loadData('leitor_ai_key') as string);
+    if (loadData('leitor_ai_model')) setAiModel(loadData('leitor_ai_model') as string);
+    if (loadData('leitor_ai_url')) setAiLocalUrl(loadData('leitor_ai_url') as string);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('leitor_ai_provider', aiProvider);
-    localStorage.setItem('leitor_ai_key', aiApiKey);
-    localStorage.setItem('leitor_ai_model', aiModel);
-    localStorage.setItem('leitor_ai_url', aiLocalUrl);
+    saveData('leitor_ai_provider', aiProvider);
+    saveData('leitor_ai_key', aiApiKey);
+    saveData('leitor_ai_model', aiModel);
+    saveData('leitor_ai_url', aiLocalUrl);
   }, [aiProvider, aiApiKey, aiModel, aiLocalUrl]);
 
   const handleSaveConfigs = (extra?: { selectedAudioInput?: string; selectedAudioOutput?: string; readSpecialChars?: boolean }) => {
-    localStorage.setItem('leitor_ai_provider', aiProvider);
-    localStorage.setItem('leitor_ai_key', aiApiKey);
-    localStorage.setItem('leitor_ai_model', aiModel);
-    localStorage.setItem('leitor_ai_url', aiLocalUrl);
-    if (extra?.selectedAudioInput) localStorage.setItem('leitor_audio_input', extra.selectedAudioInput);
-    if (extra?.selectedAudioOutput) localStorage.setItem('leitor_audio_output', extra.selectedAudioOutput);
-    if (extra?.readSpecialChars !== undefined) localStorage.setItem('leitor_special_chars', extra.readSpecialChars ? 'true' : 'false');
+    saveData('leitor_ai_provider', aiProvider);
+    saveData('leitor_ai_key', aiApiKey);
+    saveData('leitor_ai_model', aiModel);
+    saveData('leitor_ai_url', aiLocalUrl);
+    if (extra?.selectedAudioInput) saveData('leitor_audio_input', extra.selectedAudioInput);
+    if (extra?.selectedAudioOutput) saveData('leitor_audio_output', extra.selectedAudioOutput);
+    if (extra?.readSpecialChars !== undefined) saveData('leitor_special_chars', extra.readSpecialChars ? 'true' : 'false');
   };
 
   const handleAI = async (

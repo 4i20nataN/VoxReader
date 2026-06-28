@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Volume2, Mic, History, ChevronLeft } from 'lucide-react';
+import { saveData } from '../lib/persistence';
 
 interface SpeechPackInfo {
   name: string; displayName: string; installed: boolean;
@@ -99,7 +100,7 @@ export function SetupWizard({ onComplete, speechPacks, installingPack, installPr
                   <ChevronLeft size={16} /> Voltar
                 </button>
               )}
-              <button onClick={() => { localStorage.setItem('leitor_setup_done', 'true'); onComplete(); }} className="flex-1 py-3.5 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold transition-all shadow-lg active:scale-95">Concluir Instalação</button>
+              <button onClick={() => { saveData('leitor_setup_done', 'true'); onComplete(); }} className="flex-1 py-3.5 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-bold transition-all shadow-lg active:scale-95">Concluir Instalação</button>
             </div>
           </>
         )}

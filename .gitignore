@@ -1,5 +1,6 @@
 node_modules/
 dist/
+user-data/
 release/
 build/
 coverage/

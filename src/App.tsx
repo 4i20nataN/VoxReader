@@ -13,16 +13,17 @@ import { useTheme } from './hooks/useTheme';
 import { useSpeech } from './hooks/useSpeech';
 import { useAI } from './hooks/useAI';
 import { useHistory } from './hooks/useHistory';
+import { loadData, saveData } from './lib/persistence';
 import Tesseract from 'tesseract.js';
 
 function getSavedTab(): 'editor' | 'history' | 'saved' | 'settings' {
-  const saved = localStorage.getItem('activeTab');
+  const saved = loadData('activeTab');
   if (saved === 'editor' || saved === 'history' || saved === 'saved' || saved === 'settings') return saved;
   return 'editor';
 }
 
 export default function App() {
-  const [text, setText] = useState(() => localStorage.getItem('editorText') || '');
+  const [text, setText] = useState(() => loadData('editorText') || '');
   const [status, setStatus] = useState('Aguardando...');
   const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'saved' | 'settings'>(getSavedTab);
   const [isDragging, setIsDragging] = useState(false);
@@ -35,8 +36,8 @@ export default function App() {
   const ai = useAI();
   const history = useHistory();
 
-  useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
-  useEffect(() => { localStorage.setItem('editorText', text); }, [text]);
+  useEffect(() => { saveData('activeTab', activeTab); }, [activeTab]);
+  useEffect(() => { saveData('editorText', text); }, [text]);
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const wpm = 180 * speech.rate;
@@ -200,6 +201,7 @@ export default function App() {
               showSaveToast={showSaveToast}
                speechPacks={speech.speechPacks}
                selectedPackName={speech.selectedPackName} installProgress={speech.installProgress} installingPack={speech.installingPack}
+               checkingPacks={speech.checkingPacks} speechPacksError={speech.speechPacksError}
                onSetThemeBg={theme.setThemeBg} onSetThemeAccent={theme.setThemeAccent}
                onSetStartWithWindows={speech.setStartWithWindows}
                onSetSelectedVoiceURI={speech.setSelectedVoiceURI}

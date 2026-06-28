@@ -5,6 +5,7 @@ import { ThemeBg, ThemeAccent, backgroundPalettes, accentPalettes } from '../the
 
 interface SpeechPack {
   name: string; displayName: string; installed: boolean;
+  locale?: string; langName?: string;
 }
 
 interface SettingsTabProps {
@@ -27,6 +28,8 @@ interface SettingsTabProps {
   selectedPackName: string;
   installProgress: number;
   installingPack: string | null;
+  checkingPacks: boolean;
+  speechPacksError: string | null;
   onSetThemeBg: (v: ThemeBg) => void;
   onSetThemeAccent: (v: ThemeAccent) => void;
   onSetStartWithWindows: (v: boolean) => void;
@@ -79,7 +82,7 @@ export function SettingsTab(props: SettingsTabProps) {
     themeBg, themeAccent, startWithWindows, voices, selectedVoiceURI,
     audioInputs, audioOutputs, selectedAudioInput, selectedAudioOutput,
     readSpecialChars, aiProvider, aiModel, aiApiKey, aiLocalUrl, showSaveToast,
-    speechPacks, selectedPackName, installProgress, installingPack,
+    speechPacks, selectedPackName, installProgress, installingPack, checkingPacks, speechPacksError,
     speechPrivacyOk, onCheckSpeechPrivacy, onAcceptSpeechPrivacy, onDeactivateSpeechPrivacy,
     onSetThemeBg, onSetThemeAccent, onSetStartWithWindows, onSetSelectedVoiceURI,
     onSetSelectedAudioInput, onSetSelectedAudioOutput, onSetReadSpecialChars,
@@ -88,8 +91,90 @@ export function SettingsTab(props: SettingsTabProps) {
     onCheckSpeechPacks, onInstallSpeechPack, onRemoveSpeechPack, onSelectPack
   } = props;
 
+  const [packSearch, setPackSearch] = useState('');
   const installedPacks = speechPacks.filter(p => p.installed);
   const availablePacks = speechPacks.filter(p => !p.installed);
+
+  const renderPack = (pack: SpeechPack) => {
+    const isInstalled = pack.installed;
+    const isSelected = selectedPackName === pack.name;
+    const isDownloading = installingPack === pack.name;
+    return (
+      <div key={pack.name} className={cn(
+        "flex items-center justify-between py-3 px-3 rounded-lg mb-1.5 transition-all border",
+        isSelected
+          ? "bg-[var(--accent-transparent)] border-[var(--accent-border)] shadow-sm"
+          : isInstalled
+            ? "border-[var(--border-color)] hover:bg-[var(--bg-input)]"
+            : "border-transparent hover:bg-[var(--bg-input)]"
+      )}>
+        <div className="flex items-center gap-3 min-w-0">
+          {isSelected ? (
+            <div className="w-5 h-5 rounded-full bg-[var(--accent-hover)] flex items-center justify-center shrink-0">
+              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+            </div>
+          ) : (
+            <div className="w-5 h-5 rounded-full border-2 border-[var(--border-color)] shrink-0" />
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn("text-sm truncate", isSelected ? "text-[var(--accent-hover)] font-semibold" : "text-[var(--text-main)]")}>
+                {pack.langName || pack.displayName || pack.name}
+              </span>
+              {pack.locale && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-input)] text-[var(--text-darker)] font-mono uppercase">{pack.locale}</span>
+              )}
+            </div>
+            {isInstalled && (
+              <span className={cn("text-[10px] font-medium", isSelected ? "text-[var(--accent-hover)]" : "text-emerald-500")}>
+                {isSelected ? '✓ Em uso' : 'Instalado'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {isDownloading && installProgress > 0 && (
+            <div className="w-16 h-1.5 bg-[var(--bg-input)] rounded-full overflow-hidden">
+              <div className="h-full bg-[var(--accent-hover)] rounded-full transition-all" style={{ width: `${installProgress}%` }}></div>
+            </div>
+          )}
+          {isInstalled ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => onSelectPack(pack.name)}
+                disabled={isSelected}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-lg font-medium transition-all active:scale-90 min-w-[4.5rem]",
+                  isSelected
+                    ? "bg-emerald-500 text-white cursor-default shadow-sm"
+                    : "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)]"
+                )}
+              >
+                {isSelected ? 'Em uso' : 'Usar'}
+              </button>
+              <button
+                onClick={() => onRemoveSpeechPack(pack.name)}
+                className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all active:scale-90 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
+              >
+                Desinstalar
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => onInstallSpeechPack(pack.name)}
+              disabled={isDownloading}
+              className="text-xs bg-[var(--accent-color)] text-white px-3 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-60 transition-all active:scale-90 flex items-center gap-1"
+            >
+              {isDownloading ? (
+                <>{installProgress > 0 ? `${installProgress}%` : '...'}</>
+              ) : 'Baixar'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const isElectron = typeof (window as any).require === 'function' && navigator.userAgent.includes('Electron');
 
@@ -147,114 +232,89 @@ export function SettingsTab(props: SettingsTabProps) {
                 </span>
                 <button
                   onClick={onCheckSpeechPacks}
-                  className="text-xs bg-[var(--accent-color)] text-white px-3.5 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] active:scale-90 transition-all flex items-center gap-1.5 font-medium"
+                  disabled={checkingPacks}
+                  className="text-xs bg-[var(--accent-color)] text-white px-3.5 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] active:scale-90 transition-all flex items-center gap-1.5 font-medium disabled:opacity-60"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                  Buscar
+                  <svg className={cn("w-3.5 h-3.5", checkingPacks && "animate-spin")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  {checkingPacks ? 'Buscando...' : 'Buscar'}
                 </button>
               </div>
 
-              {speechPacks.length === 0 && (
-                <p className="text-xs text-[var(--text-darker)] text-center py-6">Clique em "Buscar" para listar os pacotes disponíveis.</p>
-              )}
+              <div className="relative mb-3">
+                <input
+                  type="text"
+                  value={packSearch}
+                  onChange={e => setPackSearch(e.target.value)}
+                  placeholder="Filtrar por idioma..."
+                  className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--text-main)] placeholder-[var(--text-darker)] outline-none focus:border-[var(--accent-color)] transition-colors"
+                />
+              </div>
 
-              {speechPacks.map(pack => {
-                const isInstalled = pack.installed;
-                const isSelected = selectedPackName === pack.name;
-                const isDownloading = installingPack === pack.name;
-
-                return (
-                  <div key={pack.name} className={cn(
-                    "flex items-center justify-between py-3 px-3 rounded-lg mb-1.5 transition-all border",
-                    isSelected
-                      ? "bg-[var(--accent-transparent)] border-[var(--accent-border)] shadow-sm"
-                      : isInstalled
-                        ? "border-[var(--border-color)] hover:bg-[var(--bg-input)]"
-                        : "border-transparent hover:bg-[var(--bg-input)]"
-                  )}>
-                    <div className="flex items-center gap-3">
-                      {isSelected ? (
-                        <div className="w-5 h-5 rounded-full bg-[var(--accent-hover)] flex items-center justify-center shrink-0">
-                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-                        </div>
-                      ) : (
-                        <div className="w-5 h-5 rounded-full border-2 border-[var(--border-color)] shrink-0" />
-                      )}
-                      <div>
-                        <span className={cn(
-                          "text-sm",
-                          isSelected ? "text-[var(--accent-hover)] font-semibold" : "text-[var(--text-main)]"
-                        )}>
-                          {pack.displayName || pack.name}
-                        </span>
-                        {isInstalled && (
-                          <div className="flex gap-1.5 mt-0.5">
-                            <span className={cn(
-                              "text-[10px] font-medium",
-                              isSelected ? "text-[var(--accent-hover)]" : "text-emerald-500"
-                            )}>
-                              {isSelected ? '✓ Ativo' : 'Instalado'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isDownloading && installProgress > 0 && (
-                        <div className="w-16 h-1.5 bg-[var(--bg-input)] rounded-full overflow-hidden">
-                          <div className="h-full bg-[var(--accent-hover)] rounded-full transition-all" style={{ width: `${installProgress}%` }}></div>
-                        </div>
-                      )}
-                      {isInstalled ? (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => onSelectPack(pack.name)}
-                            disabled={isSelected}
-                            className={cn(
-                              "text-xs px-3 py-1.5 rounded-lg font-medium transition-all active:scale-90 min-w-[4.5rem]",
-                              isSelected
-                                ? "bg-emerald-500 text-white cursor-default shadow-sm"
-                                : "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)]"
-                            )}
-                          >
-                            {isSelected ? 'Em uso' : 'Usar'}
-                          </button>
-                          <button
-                            onClick={() => onRemoveSpeechPack(pack.name)}
-                            className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all active:scale-90 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
-                          >
-                            Desinstalar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => onInstallSpeechPack(pack.name)}
-                          disabled={isDownloading}
-                          className="text-xs bg-[var(--accent-color)] text-white px-3 py-1.5 rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-60 transition-all active:scale-90 flex items-center gap-1"
-                        >
-                          {isDownloading ? (
-                            <>{installProgress > 0 ? `${installProgress}%` : '...'}</>
-                          ) : 'Baixar'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {installingPack && (
-                <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
-                  <div className="flex justify-between text-xs text-[var(--text-darker)] mb-1.5">
-                    <span>Instalando...</span>
-                    <span>{installProgress}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-[var(--bg-input)] rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-[var(--accent-color)] to-[var(--accent-hover)] rounded-full transition-all duration-1000" style={{ width: `${installProgress}%` }}></div>
-                  </div>
-                  <p className="text-[10px] text-[var(--text-darker)] mt-1">Aceite a solicitação de permissão de administrador (UAC) para continuar.</p>
+              {speechPacksError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-3">
+                  <p className="text-xs text-red-500">{speechPacksError}</p>
                 </div>
               )}
+
+              {checkingPacks && speechPacks.length === 0 && (
+                <p className="text-xs text-[var(--text-darker)] text-center py-6">Buscando pacotes disponíveis...</p>
+              )}
+
+              {!checkingPacks && speechPacks.length === 0 && !speechPacksError && (
+                <p className="text-xs text-[var(--text-darker)] text-center py-6">Clique em "Buscar" para listar os pacotes de fala disponíveis para seu Windows.</p>
+              )}
+
+              {installedPacks.length > 0 && (() => {
+                const filtered = installedPacks.filter(p =>
+                  !packSearch || p.langName?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                  p.locale?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                  p.displayName?.toLowerCase().includes(packSearch.toLowerCase())
+                );
+                if (filtered.length === 0) return null;
+                return (
+                  <div className="mb-3">
+                    <p className="text-[10px] font-bold text-[var(--text-darker)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      Instalados ({filtered.length})
+                    </p>
+                    {filtered.map(pack => renderPack(pack))}
+                  </div>
+                );
+              })()}
+
+              {availablePacks.length > 0 && (() => {
+                const filtered = availablePacks.filter(p =>
+                  !packSearch || p.langName?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                  p.locale?.toLowerCase().includes(packSearch.toLowerCase()) ||
+                  p.displayName?.toLowerCase().includes(packSearch.toLowerCase())
+                );
+                if (filtered.length === 0) return null;
+                return (
+                  <div>
+                    <p className="text-[10px] font-bold text-[var(--text-darker)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                      Disponíveis ({filtered.length})
+                    </p>
+                    {filtered.map(pack => renderPack(pack))}
+                  </div>
+                );
+              })()}
+
+              {installingPack && (() => {
+                const pack = speechPacks.find(p => p.name === installingPack);
+                return (
+                  <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                    <div className="flex justify-between text-xs text-[var(--text-darker)] mb-1.5">
+                      <span>Instalando {pack?.langName || pack?.displayName || ''}...</span>
+                      <span>{installProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-[var(--bg-input)] rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-[var(--accent-color)] to-[var(--accent-hover)] rounded-full transition-all duration-1000" style={{ width: `${installProgress}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-darker)] mt-1">Aceite a solicitação de permissão de administrador (UAC) para continuar.</p>
+                  </div>
+                );
+              })()}
             </div>
 
             <p className="text-xs text-[var(--text-darker)] leading-relaxed">Baixe o pacote de fala do seu idioma e clique em "Usar" para ativar a transcrição por voz offline.</p>
