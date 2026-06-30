@@ -1,6 +1,6 @@
 {
-  "name": "leitor-texto",
-  "description": "Leitor Inteligente - Síntese de voz e utilitários de texto",
+  "name": "voxreader",
+  "description": "VoxReader - Síntese de voz e utilitários de texto",
   "author": "Usuário",
   "private": true,
   "version": "1.0.0",
@@ -12,8 +12,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "desktop:pack": "npm run build && npx @electron/packager . \"Leitor Inteligente\" --platform=win32 --arch=x64 --out=\"$env:TEMP/leitor-release\" --overwrite && Copy-Item -Recurse -Force \"$env:TEMP/leitor-release/*\" release/",
-    "desktop:installer": "npx electron-builder --prepackaged=\"release/Leitor Inteligente-win32-x64\" --win nsis",
+    "desktop:pack": "npm run build && rmdir /s /q \"release\\VoxReader-win32-x64\" 2>nul & npx @electron/packager . \"VoxReader\" --platform=win32 --arch=x64 --out=\"%TEMP%\\voxreader-release\" --overwrite --ignore=\"node_modules|src|\\.opencode|LICENSE$|android|docs|public|release|speech-worker|user-data|resources|\\.aistudio|\\.gitignore|\\.env.*|AGENTS\\.md|README\\.md|metadata\\.json|capacitor\\.config\\.json|tsconfig\\.json|vite\\.config\\.ts|(?<!dist)[/\\\\]index\\.html$|package-lock\\.json|\\.git$\" && xcopy /E /I /Y \"%TEMP%\\voxreader-release\\VoxReader-win32-x64\" \"release\\VoxReader-win32-x64\\\" && copy /Y \"resources\\SpeechWorker.exe\" \"release\\VoxReader-win32-x64\\resources\\\"",
+    "desktop:installer": "npx electron-builder --prepackaged=\"release/VoxReader-win32-x64\" --win nsis",
     "desktop:build": "npm run desktop:pack && npm run desktop:installer",
     "mobile:sync": "npm run build && npx cap sync",
     "mobile:android": "npx cap run android"
@@ -51,8 +51,8 @@
     "vite": "^6.2.3"
   },
   "build": {
-    "appId": "com.leitor.texto",
-    "productName": "Leitor Inteligente",
+    "appId": "com.voxreader.app",
+    "productName": "VoxReader",
     "directories": {
       "output": "release"
     },

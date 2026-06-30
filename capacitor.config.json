@@ -1,6 +1,6 @@
 {
   "appId": "com.leitorinteligente.app",
-  "appName": "Leitor Inteligente",
+  "appName": "VoxReader",
   "webDir": "dist",
   "bundledWebRuntime": false
 }

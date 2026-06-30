@@ -26,7 +26,9 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
-const DATA_DIR = path.join(__dirname, 'user-data');
+const DATA_DIR = app.isPackaged
+  ? path.join(app.getPath('userData'), 'VoxReader-data')
+  : path.join(__dirname, 'user-data');
 
 const DIST_PORT = 51999;
 
@@ -436,7 +438,7 @@ ipcMain.handle('deactivate-speech-privacy', async () => {
 
 // Windows built-in speech recognition using user-chosen culture
 function getWorkerPath() {
-  if (app.isPackaged) return path.join(process.resourcesPath, 'speech-worker.exe');
+  if (app.isPackaged) return path.join(process.resourcesPath, 'SpeechWorker.exe');
   return path.join(__dirname, 'resources', 'SpeechWorker.exe');
 }
 
@@ -547,7 +549,7 @@ app.whenReady().then(() => {
   tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Abrir Leitor Inteligente', click: showWindow },
+    { label: 'Abrir VoxReader', click: showWindow },
     { type: 'separator' },
     { label: 'Sair e Encerrar', click: () => {
         app.isQuitting = true;
@@ -555,7 +557,7 @@ app.whenReady().then(() => {
     }}
   ]);
 
-  tray.setToolTip('Leitor Inteligente');
+  tray.setToolTip('VoxReader');
   tray.setContextMenu(contextMenu);
   tray.on('click', showWindow);
 

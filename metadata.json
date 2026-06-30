@@ -1,5 +1,5 @@
 {
-  "name": "Leitor Inteligente",
+  "name": "VoxReader",
   "description": "Leitor de texto leve com suporte a OCR, vozes locais e histórico.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
